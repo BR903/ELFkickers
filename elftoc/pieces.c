@@ -63,7 +63,7 @@ static struct typeinfo const ctypes32[P_COUNT] = {
     { _(unsigned char) },	/* P_BYTES */
     { _(Elf32_Half) },		/* P_HALVES */
     { _(Elf32_Word) },		/* P_WORDS */
-    { _(Elf32_Xword) },		/* P_XWORDS */
+    { _(uint64_t) },		/* P_XWORDS */
     { _(Elf32_Addr) },		/* P_ADDRS */
     { _(char) },		/* P_STRINGS */
     { _(Elf32_Word) },		/* P_NOTE */

@@ -108,12 +108,18 @@ static struct machineid machineids[] = {
     _("68K_", EM_68K),
     _("ALPHA_", EM_ALPHA),
     _("ARM_", EM_ARM),
+#ifdef EM_CRIS
     _("CRIS_", EM_CRIS),
+#endif
     __("HP_", "PARISC_", EM_PARISC),
     __("IA_64_", "IA64_", EM_IA_64),
+#ifdef EM_M32R
     _("M32R_", EM_M32R),
+#endif
     _("MIPS_", EM_MIPS),
+#ifdef EM_MN10300
     _("MN10300_", EM_MN10300),
+#endif
     _("PPC_", EM_PPC),
     _("PPC64_", EM_PPC64),
     _("SH_", EM_SH),

@@ -133,11 +133,6 @@ int elfrw_read_Off(FILE *fp, Elf64_Off *in)
     return elfrw_read_Addr(fp, (Elf64_Addr*)in);
 }
 
-int elfrw_read_Section(FILE *fp, Elf64_Section *in)
-{
-    return elfrw_read_Half(fp, (Elf64_Half*)in);
-}
-
 int elfrw_read_Versym(FILE *fp, Elf64_Versym *in)
 {
     return elfrw_read_Half(fp, (Elf64_Half*)in);
@@ -200,11 +195,6 @@ int elfrw_write_Sxword(FILE *fp, Elf64_Sxword const *out)
 int elfrw_write_Off(FILE *fp, Elf64_Off const *out)
 {
     return elfrw_write_Addr(fp, (Elf64_Addr const*)out);
-}
-
-int elfrw_write_Section(FILE *fp, Elf64_Section const *out)
-{
-    return elfrw_write_Half(fp, (Elf64_Half const*)out);
 }
 
 int elfrw_write_Versym(FILE *fp, Elf64_Versym const *out)

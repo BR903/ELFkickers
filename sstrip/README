@@ -14,7 +14,7 @@ It should be noted that most programs that work with ELF files are
 dependent on the section header table as an index to the file's
 contents. Thus, utilities such as gdb and objdump will often have
 limited functionality when working with an executable with no section
-header table. Some other utilities may refused to work with them at
+header table. Some other utilities may refuse to work with them at
 all.
 
 sstrip is at heart a very simple program. It depends upon the common
@@ -24,4 +24,4 @@ permits it to discard the latter material without affecting file
 offsets and memory addresses in what remains. Of course, the ELF
 standard permits files to be organized in almost any order, so if a
 pathological linker decided to put the program segment header table at
-the end of the file, sstrip would be unable to do anything.
+the end of the file, sstrip would be unable to remove anything.

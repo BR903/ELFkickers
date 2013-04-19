@@ -217,7 +217,6 @@ static int modifyheaders(void)
     if (ehdr.e_shoff >= newsize) {
 	ehdr.e_shoff = 0;
 	ehdr.e_shnum = 0;
-	ehdr.e_shentsize = 0;
 	ehdr.e_shstrndx = 0;
     }
 

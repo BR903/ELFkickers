@@ -16,6 +16,13 @@
 #include "dynamic.h"
 #include "outelf32.h"
 
+/* For platforms that fail to supply a definition of NT_AUXV, the
+ * usual definition is given here.
+ */
+#ifndef NT_AUXV
+#define NT_AUXV 6
+#endif
+
 /* The output function for the 32-bit ELF header. This is the only
  * output function that outputs a single struct instead of an array.
  */

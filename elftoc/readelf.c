@@ -13,6 +13,20 @@
 #include "shdrtab.h"
 #include "readelf.h"
 
+/* Some platforms (e.g. FreeBSD) may not provide these standard
+ * defines in elf.h, so default definitions are supplied as a
+ * fallback.
+ */
+#ifndef ELFCLASSNUM
+#define ELFCLASSNUM 3
+#endif
+#ifndef ELFDATANUM
+#define ELFDATANUM 2
+#endif
+#ifndef EV_NUM
+#define EV_NUM 2
+#endif
+
 static long filesize;			/* size of the input ELF file */
 static unsigned char const *image;	/* pointer to the ELF file image */
 static Elf64_Ehdr const *ehdr;		/* pointer to a scrubbed ELF header */

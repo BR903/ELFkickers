@@ -644,9 +644,15 @@ static void describephdr(textline *line, Elf64_Phdr *phdr)
       case PT_PHDR:	    append(line, "P ");		break;
       case PT_DYNAMIC:	    append(line, "D ");		break;
       case PT_TLS:	    append(line, "T ");		break;
+#ifdef PT_GNU_EH_FRAME
       case PT_GNU_EH_FRAME: append(line, "U ");		break;
+#endif
+#ifdef PT_GNU_STACK
       case PT_GNU_STACK:    append(line, ". ");		break;
+#endif
+#ifdef PT_GNU_RELRO
       case PT_GNU_RELRO:    append(line, "R ");		break;
+#endif
       default:		    append(line, "? ");		break;
 
     }
@@ -768,10 +774,14 @@ static void describeshdr(textline *line, Elf64_Shdr *shdr)
       case SHT_HASH:		append(line, "H ");	break;
       case SHT_GROUP:		append(line, "g ");	break;
       case SHT_NOBITS:		append(line, "0 ");	break;
+#ifdef SHT_GNU_HASH
       case SHT_GNU_HASH:	append(line, "H ");	break;
+#endif
+#ifdef SHT_GNU_verdef
       case SHT_GNU_verdef:	append(line, "V ");	break;
       case SHT_GNU_verneed:	append(line, "V ");	break;
       case SHT_GNU_versym:	append(line, "V ");	break;
+#endif
       default:			append(line, "? ");	break;
     }
 

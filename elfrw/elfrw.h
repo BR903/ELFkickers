@@ -68,7 +68,6 @@ extern int elfrw_read_Xword(FILE *fp, Elf64_Xword *in);
 extern int elfrw_read_Sxword(FILE *fp, Elf64_Sxword *in);
 extern int elfrw_read_Addr(FILE *fp, Elf64_Addr *in);
 extern int elfrw_read_Off(FILE *fp, Elf64_Off *in);
-extern int elfrw_read_Section(FILE *fp, Elf64_Section *in);
 extern int elfrw_read_Versym(FILE *fp, Elf64_Versym *in);
 
 extern int elfrw_read_Ehdr(FILE *fp, Elf64_Ehdr *in);
@@ -111,7 +110,6 @@ extern int elfrw_write_Xword(FILE *fp, Elf64_Xword const *out);
 extern int elfrw_write_Sxword(FILE *fp, Elf64_Sxword const *out);
 extern int elfrw_write_Addr(FILE *fp, Elf64_Addr const *out);
 extern int elfrw_write_Off(FILE *fp, Elf64_Off const *out);
-extern int elfrw_write_Section(FILE *fp, Elf64_Section const *out);
 extern int elfrw_write_Versym(FILE *fp, Elf64_Versym const *out);
 
 extern int elfrw_write_Ehdr(FILE *fp, Elf64_Ehdr const *out);

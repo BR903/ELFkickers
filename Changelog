@@ -1,3 +1,16 @@
+* November 2011: version 3.0a
+
+	This is a very minor update.
+
+	Sofian Brabez supplied me with information to help ELF Kickers
+	compile under FreeBSD. I've gratefully incorporated his changes.
+
+	Raphaël Huck reported that sstrip's alteration to the e_shentsize
+	field is flagged as invalid by file(1). This has been fixed.
+
+	infect now attempts to reset the infected file's mtime. Not
+	important, but why not.
+	
 * May 2011: version 3.0
 
 	After a decade hiatus, I finally took the plunge and updated this

