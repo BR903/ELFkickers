@@ -181,7 +181,6 @@ static int changesymbols(Elf32_Sym *symtab, char const *strtab, int count)
  */
 static int rebind(void)
 {
-    Elf32_Ehdr	ehdr;
     Elf32_Shdr *shdrs;
     Elf32_Sym  *symtab;
     char       *strtab;
@@ -237,14 +236,14 @@ int main(int argc, char *argv[])
     while ((n = getopt(argc, argv, "hsvw")) != EOF) {
 	switch (n) {
 	  case 's':
-	    fromstrength = STB_GLOBAL;
-	    tostrength = STB_WEAK;
-	    tostrengthtext = "Weakening";
-	    break;
-	  case 'w':
 	    fromstrength = STB_WEAK;
 	    tostrength = STB_GLOBAL;
 	    tostrengthtext = "Strengthening";
+	    break;
+	  case 'w':
+	    fromstrength = STB_GLOBAL;
+	    tostrength = STB_WEAK;
+	    tostrengthtext = "Weakening";
 	    break;
 	  case 'h':
 	    fputs(yowzitch, stdout);

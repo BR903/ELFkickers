@@ -1,3 +1,8 @@
+* May 2001: version 2.0a
+
+	Two small bug fixes, reported to me by people who downloaded
+	version 2.0.
+
 * April 2001: version 2.0
 
 	I began spelunking in the system header files <elf.h> and
