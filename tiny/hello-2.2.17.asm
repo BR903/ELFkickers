@@ -7,9 +7,7 @@
 
 BITS 32
 
-%define	ORIGIN		0x05936000
-
-		org	ORIGIN
+		org	0x05936000
 
 		db	0x7F, "ELF"
 		dd	1
@@ -17,10 +15,9 @@ BITS 32
 		dd	$$
 		dw	2
 		dw	3
-entry		equ	ORIGIN + ($ - $$)
-		inc	eax			; 1 == exit syscall no.
+_start:		inc	eax			; 1 == exit syscall no.
 		mov	dl, 13			; set edx to length of message
-		cmp	al, entry & 0xFF
+		cmp	al, _start - $$
 		pusha				; save eax and ebx
 		xchg	eax, ebx		; set ebx to 1 (stdout)
 		add	eax, dword 4		; 4 == write syscall no.

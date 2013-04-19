@@ -7,20 +7,17 @@
 
 BITS 32
 
-%define	ORIGIN		0x255F0000
-
-		org	ORIGIN
+		org	0x255F0000
 
 		db	0x7F, "ELF"
 		dd	1
 		dd	0
-		dw	ORIGIN & 0xFFFF
-entry		equ	ORIGIN + ($ - $$)
-		pop	edi			; remove argc from stack
+		dw	$$
+_start:		pop	edi			; remove argc from stack
 		and	eax, 0x00030002		; clear all but 3 bits in eax
 		mov	ch, 0xFF		; set ecx to >= 0xFF00
 		jmp	short skip
-		dw	entry & 0xFFFF
+		dw	_start
 skip:		pop	edi			; get argv[0]
 		and	eax, 4			; set eax to zero
 		repnz scasb			; find end of argv[0]

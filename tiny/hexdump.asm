@@ -248,9 +248,8 @@ hexout:
 		call	hexout0
 hexout0:	xchg	al, ah
 		cmp	al, 10
-		jb	under10
-		add	al, 'A' - ('9' + 1)
-under10:	add	al, '0'
+		sbb	al, 0x69
+		das
 		stosb
 		ret
 

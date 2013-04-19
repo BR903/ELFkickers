@@ -11,11 +11,12 @@
 #include	<stdarg.h>
 #include	<errno.h>
 #include	<sys/stat.h>
-#include	<linux/elf.h>
 #include	"gen.h"
+#include	"elf.h"
 #include	"pieces.h"
 #include	"addr.h"
 #include	"shdrtab.h"
+#include	"dynamic.h"
 #include	"out.h"
 #include	"elftoc.h"
 
@@ -60,7 +61,7 @@ static Elf32_Shdr      *shdrs = NULL;
  */
 static int		thefilesize;
 
-/* Displays a formatted error message on stdout. If fmt is NULL, then
+/* Displays a formatted error message on stderr. If fmt is NULL, then
  * prints a canned out-of-memory error and exits the program directly.
  * Otherwise, FALSE is returned.
  */
@@ -186,7 +187,7 @@ static int readhdrtables(void)
 /* Uses the program header table to find the file offset corresponding
  * to a memory address. -1 is returned if no such offset exists.
  */
-static int memtofile(unsigned addr)
+static int addrtooffset(unsigned addr)
 {
     Elf32_Phdr *phdr;
     unsigned	i;
@@ -205,77 +206,54 @@ static int memtofile(unsigned addr)
 static void getdynamicentries(Elf32_Dyn const *dynamic)
 {
     Elf32_Dyn const    *dyn;
-    int			stroff = 0, relgoff = 0, relagoff = 0, relpoff = 0,
-			hashoff = 0, symoff = 0;
-    int			strsz = 0, relgsz = 0, relagsz = 0, relpsz = 0,
-			symsz = 0, relptype = 0;
+    Elf32_Sword		val[N_DT_COUNT];
     int		       *p;
-    int			i, n;
+    int			off, n, i;
 
-    for (i = 0, dyn = dynamic ; dyn->d_tag != DT_NULL ; ++i, ++dyn) {
-	switch (dyn->d_tag) {
-	  case DT_STRTAB:	stroff = memtofile(dyn->d_un.d_val);	break;
-	  case DT_JMPREL:	relpoff = memtofile(dyn->d_un.d_val);	break;
-	  case DT_REL:		relgoff = memtofile(dyn->d_un.d_val);	break;
-	  case DT_RELA:		relagoff = memtofile(dyn->d_un.d_val);	break;
-	  case DT_HASH:		hashoff = memtofile(dyn->d_un.d_val);	break;
-	  case DT_SYMTAB:	symoff = memtofile(dyn->d_un.d_val);	break;
+    memset(val, 0, sizeof val);
+    for (i = 0, dyn = dynamic ; dyn->d_tag != DT_NULL ; ++i, ++dyn)
+	if ((n = getdyntagid(dyn->d_tag)) > 0)
+	    val[n] = dyn->d_un.d_val;
 
-	  case DT_STRSZ:	strsz = dyn->d_un.d_val;		break;
-	  case DT_PLTRELSZ:	relpsz = dyn->d_un.d_val;		break;
-	  case DT_RELSZ:	if (!relgsz) relgsz = dyn->d_un.d_val;	break;
-	  case DT_RELASZ:	if (!relagsz) relagsz = dyn->d_un.d_val;break;
+#define	trysegment(addr, sz, off, type, name)				\
+    (((off) = addrtooffset(addr)) >= 0					\
+	&& (recordpiece((off), ((off) + (sz) > thefilesize ?		\
+				     thefilesize - (off) : (sz)),	\
+			(type), 0, (name)), 0))
 
-	  case DT_RELENT:
-	    if (dyn->d_un.d_val != sizeof(Elf32_Rel))
-		relgsz = -1;
-	    break;
-	  case DT_RELAENT:
-	    if (dyn->d_un.d_val != sizeof(Elf32_Rela))
-		relagsz = -1;
-	    break;
-	  case DT_SYMENT:
-	    if (dyn->d_un.d_val != sizeof(Elf32_Sym))
-		symsz = -1;
-	    break;
-	  case DT_PLTREL:
-	    relptype = dyn->d_un.d_val == DT_REL ? P_REL : P_RELA;
-	    break;
-	}
-    }
+    trysegment(val[N_DT_STRTAB], val[N_DT_STRSZ], off, P_SECTION, "~dynstr");
+    trysegment(val[N_DT_SYMINFO], val[N_DT_SYMINSZ],
+	       off, P_HALVES, "~syminfo");
+    trysegment(val[N_DT_INIT_ARRAY], val[N_DT_INIT_ARRAYSZ],
+	       off, P_WORDS, "~init_array");
+    trysegment(val[N_DT_FINI_ARRAY], val[N_DT_FINI_ARRAYSZ],
+	       off, P_WORDS, "~fini_array");
+    trysegment(val[N_DT_PREINIT_ARRAY], val[N_DT_PREINIT_ARRAYSZ],
+	       off, P_WORDS, "~preinit_array");
+    if (val[N_DT_RELENT] == sizeof(Elf32_Rel))
+	trysegment(val[N_DT_REL], val[N_DT_RELSZ], off, P_REL, "~rel_got");
+    if (val[N_DT_RELAENT] == sizeof(Elf32_Rela))
+	trysegment(val[N_DT_RELA], val[N_DT_RELASZ], off, P_RELA, "~rela_got");
+    n = val[N_DT_PLTREL] == sizeof(Elf32_Rel) ? P_REL :
+	val[N_DT_PLTREL] == sizeof(Elf32_Rela) ? P_RELA : 0;
+    if (n)
+	trysegment(val[N_DT_JMPREL], val[N_DT_PLTRELSZ], off, n,
+		   n == P_REL ? "~plt_rel" : "plt_rela");
 
-    if (stroff > 0 && strsz > 0) {
-	if (stroff + strsz > thefilesize)
-	    strsz = thefilesize - stroff;
-	recordpiece(stroff, strsz, P_SECTION, 0, "~dynstr");
-    }
-    if (relgoff > 0 && relgsz > 0) {
-	if (relgoff + relgsz > thefilesize)
-	    relgsz = thefilesize - relgoff;
-	recordpiece(relgoff, relgsz, P_REL, 0, "~rel_got");
-    }
-    if (relagoff > 0 && relagsz > 0) {
-	if (relagoff + relagsz > thefilesize)
-	    relagsz = thefilesize - relagoff;
-	recordpiece(relagoff, relagsz, P_RELA, 0, "~rela_got");
-    }
-    if (relpoff > 0 && relpsz > 0 && relptype) {
-	if (relpoff + relpsz > thefilesize)
-	    relpsz = thefilesize - relpoff;
-	recordpiece(relpoff, relpsz, relptype, 0,
-		    relptype == P_REL ? "~rel_plt" : "~rela_plt");
-    }
-    if (hashoff > 0) {
-	if ((p = getarea(hashoff, 8))) {
+#undef trysegment
+
+    if ((off = addrtooffset(val[N_DT_HASH])) >= 0) {
+	if ((p = getarea(off, 8))) {
 	    n = (p[0] + p[1] + 2) * sizeof(Elf32_Word);
-	    if (hashoff + n > thefilesize)
-		n = thefilesize - hashoff;
-	    recordpiece(hashoff, n, P_HASH, 0, "~hash");
-	    if (symoff > 0 && !symsz) {
+	    if (off + n > thefilesize)
+		n = thefilesize - off;
+	    recordpiece(off, n, P_HASH, 0, "~hash");
+	    off = addrtooffset(val[N_DT_SYMTAB]);
+	    if (off >= 0 && val[N_DT_SYMENT] == sizeof(Elf32_Sym)) {
 		n = p[1] * sizeof(Elf32_Sym);
-		if (symoff + n > thefilesize)
-		    n = thefilesize - symoff;
-		recordpiece(symoff, n, P_SYMTAB, 0, "~dynsym");
+		if (off + n > thefilesize)
+		    n = thefilesize - off;
+		recordpiece(off, n, P_SYMTAB, 0, "~dynsym");
 	    }
 	    free(p);
 	}
@@ -301,7 +279,7 @@ static int recordsections(void)
 	      case PT_PHDR:	type = P_PHDRTAB;  str = "~phdrs";	break;
 	      case PT_DYNAMIC:	type = P_DYNAMIC;  str = "~dynamic";	break;
 	      case PT_INTERP:	type = P_SECTION;  str = "~interp";	break;
-	      case PT_NOTE:	type = P_SECTION;  str = "~note";	break;
+	      case PT_NOTE:	type = P_NOTE;     str = "~note";	break;
 	      default:		type = P_BYTES;	   str = NULL;		break;
 	    }
 	    if (!type)
@@ -330,16 +308,26 @@ static int recordsections(void)
     if (shdrs) {
 	for (i = 0 ; i < ehdr->e_shnum ; ++i) {
 	    switch (shdrs[i].sh_type) {
-	      case SHT_NULL:	type = 0;				break;
-	      case SHT_NOBITS:	type = 0;				break;
-	      case SHT_SYMTAB:	type = P_SYMTAB;			break;
-	      case SHT_DYNSYM:	type = P_SYMTAB;			break;
-	      case SHT_HASH:	type = P_HASH;				break;
-	      case SHT_DYNAMIC:	type = P_DYNAMIC;			break;
-	      case SHT_REL:	type = P_REL;				break;
-	      case SHT_RELA:	type = P_RELA;				break;
+	      case SHT_NULL:		type = 0;			break;
+	      case SHT_NOBITS:		type = 0;			break;
+	      case SHT_SYMTAB:		type = P_SYMTAB;		break;
+	      case SHT_DYNSYM:		type = P_SYMTAB;		break;
+	      case SHT_HASH:		type = P_HASH;			break;
+	      case SHT_DYNAMIC:		type = P_DYNAMIC;		break;
+	      case SHT_REL:		type = P_REL;			break;
+	      case SHT_RELA:		type = P_RELA;			break;
+	      case SHT_NOTE:		type = P_NOTE;			break;
+	      case SHT_GNU_verdef:	type = P_WORDS;			break;
+	      case SHT_GNU_verneed:	type = P_WORDS;			break;
+	      case SHT_GNU_versym:	type = P_HALVES;		break;
 	      default:
-		type = shdrs[i].sh_entsize == 4 ? P_WORDS : P_SECTION;	break;
+		  if (shdrs[i].sh_entsize == 4)
+		      type = P_WORDS;
+		  else if (shdrs[i].sh_entsize == 2)
+		      type = P_HALVES;
+		  else
+		      type = P_SECTION;
+		  break;
 	    }
 	    if (!type)
 		continue;

@@ -6,8 +6,8 @@
 
 #include	<stdlib.h>
 #include	<ctype.h>
-#include	<linux/elf.h>
 #include	"gen.h"
+#include	"elf.h"
 #include	"outbasic.h"
 #include	"shdrtab.h"
 

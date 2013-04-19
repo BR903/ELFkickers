@@ -7,8 +7,8 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
-#include	<linux/elf.h>
 #include	"gen.h"
+#include	"elf.h"
 #include	"pieces.h"
 
 /* The collection of file pieces.
@@ -24,7 +24,9 @@ typeinfo const ctypes[P_COUNT] = {
     { _(unsigned char) },		/* P_UNCLAIMED */
     { _(unsigned char) },		/* P_BYTES */
     { _(unsigned char) },		/* P_SECTION */
+    { _(Elf32_Half) },			/* P_HALVES */
     { _(Elf32_Word) },			/* P_WORDS */
+    { _(Elf32_Word) },			/* P_NOTE */
     { _(Elf32_Word) },			/* P_HASH */
     { _(Elf32_Sym) },			/* P_SYMTAB */
     { _(Elf32_Rel) },			/* P_REL */
@@ -67,6 +69,7 @@ void recordpiece(int offset, int size, int type, int shndx, char const *name)
     } else
 	strcpy(pieces[piecenum].name, "~segment");
     pieces[piecenum].type = type;
+    pieces[piecenum].warn = FALSE;
     ++piecenum;
 }
 
@@ -175,24 +178,21 @@ int arrangepieces(void)
     return TRUE;
 }
 
-/* Checks the alignment and sizing of pieces that contain structure
- * arrays, and issues a warning if the alignment of any such pieces
- * makes it impossible to properly reproduce the file image. Also, if
- * any such pieces have a size that doesn't fit with the size of its
- * elements, then the piece is turned into a simple byte array.
+/* Checks the offset and sizing of pieces that contain arrays of
+ * anything other than simple characters. If either of these values is
+ * inconsistent with the alignment requirements of the field's type,
+ * then force the field to be a simple byte array and issue a warning.
  */
 void verifypiecetypes(void)
 {
     int	i;
 
-    for (i = 0 ; i < piecenum ; ++i)
-	if (ctypes[pieces[i].type].size > 1
-		&& pieces[i].size % ctypes[pieces[i].type].size)
-	    pieces[i].type = P_SECTION;
     for (i = 0 ; i < piecenum ; ++i) {
-	if (ctypes[pieces[i].type].size > 1 && (pieces[i].from & 3)) {
-	    err("warning: file contains misaligned structures.");
-	    break;
-	}
+	if (ctypes[pieces[i].type].size < 2)
+	    continue;
+	if (pieces[i].from % (ctypes[pieces[i].type].size == 2 ? 2 : 4))
+	    pieces[i].warn |= PW_MISALIGNED;
+	if (pieces[i].size % ctypes[pieces[i].type].size)
+	    pieces[i].warn |= PW_WRONGSIZE;
     }
 }

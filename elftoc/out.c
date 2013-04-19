@@ -6,29 +6,23 @@
 
 #include	<stdio.h>
 #include	<string.h>
-#include	<linux/elf.h>
 #include	"gen.h"
+#include	"elf.h"
 #include	"elftoc.h"
 #include	"addr.h"
 #include	"pieces.h"
 #include	"shdrtab.h"
+#include	"dynamic.h"
 #include	"outbasic.h"
 #include	"outtools.h"
 #include	"out.h"
+
 
 /* The beginning of every successful output.
  */
 static char const *cprolog =
 	"#include <stddef.h>\n"
-	"#include <linux/elf.h>\n"
-	"\n"
-	"#ifndef ELF32_ST_INFO\n"
-	"#define ELF32_ST_INFO(b, t) (((b) << 4) + ((t) & 0xF))\n"
-	"#endif\n"
-	"\n"
-	"#ifndef ELF32_R_INFO\n"
-	"#define ELF32_R_INFO(s, t)  (((s) << 8) + ((unsigned char)(t)))\n"
-	"#endif\n"
+	"#include \"elf.h\"\n"
 	"\n";
 
 /* All the macro definitions available for use in the output.
@@ -98,6 +92,51 @@ static int bytesout(pieceinfo const *piece, void const *ptr)
     return TRUE;
 }
 
+/* The output functions for pieces of type P_HALVES. The contents will
+ * be output as an array of hexadecimal or integer values, depending
+ * on the range and average of the values.
+ */
+static int halvesout(pieceinfo const *piece, void const *ptr)
+{
+    Elf32_Half const   *half;
+    char const	       *fmt = NULL;
+    unsigned int	sum;
+    int			i, fullsize, size;
+
+    fullsize = piece->size / sizeof *half;
+    half = ptr;
+    for (size = fullsize ; size > 0 && !half[size - 1] ; --size) ;
+    if (!size) {
+	out("{ 0 }");
+	return TRUE;
+    }
+    if (fullsize - size < 8)
+	size = fullsize;
+
+    sum = 0;
+    for (i = 0, half = ptr ; i < size ; ++i, ++half) {
+	if (*half > 0xFF) {
+	    fmt = "0x%04X";
+	    break;
+	}
+	sum += *half;
+    }
+    if (!fmt)
+	fmt = sum / size < 16 ? "%u" : "0x%02X";
+
+    beginblock(TRUE);
+    for (i = 0, half = ptr ; i < size ; ++i, ++half)
+	outf(fmt, (unsigned int)*half);
+    if (size < fullsize) {
+	char buf[32];
+	sprintf(buf, "/* %s x %%d */", fmt);
+	outf(buf, 0, fullsize - size);
+    }
+    endblock();
+
+    return TRUE;
+}
+
 /* The output functions for pieces of type P_WORDS. The contents will
  * be output as an array of hexadecimal or integer values, depending
  * on the range and average of the values.
@@ -122,17 +161,17 @@ static int wordsout(pieceinfo const *piece, void const *ptr)
     sum = 0;
     for (i = 0, word = ptr ; i < size ; ++i, ++word) {
 	if (*word > 0xFFFF) {
-	    fmt = "0x%08X";
+	    fmt = "0x%08lX";
 	    break;
 	}
 	sum += *word;
     }
     if (!fmt)
-	fmt = sum / size < 256 ? "%u" : "0x%04X";
+	fmt = sum / size < 256 ? "%lu" : "0x%04lX";
 
     beginblock(TRUE);
     for (i = 0, word = ptr ; i < size ; ++i, ++word)
-	outf("0x%08X", *word);
+	outf(fmt, (unsigned long)*word);
     if (size < fullsize) {
 	char buf[32];
 	sprintf(buf, "/* %s x %%d */", fmt);
@@ -140,6 +179,31 @@ static int wordsout(pieceinfo const *piece, void const *ptr)
     }
     endblock();
 
+    return TRUE;
+}
+
+/* The output function for pieces of type P_NOTE. Most of the note
+ * section is mainly free-form in nature, the only constraint being
+ * alignment. It is displayed as an array of values, with line breaks
+ * to indicate the beginning of a note header.
+ */
+static int noteout(pieceinfo const *piece, void const *ptr)
+{
+    Elf32_Word const   *word = ptr;
+    int			i, n;
+
+    beginblock(TRUE);
+    i = 0;
+    while (i < piece->size / 4) {
+	n = (word[i] + word[i + 1] + 3) / 4;
+	linebreak();
+	outint(word[i++]);
+	outint(word[i++]);
+	outword(word[i++]);
+	while (n-- && i < piece->size / 4)
+	    outf("0x%08lX", (unsigned long)word[i++]);
+    }
+    endblock();
     return TRUE;
 }
 
@@ -209,108 +273,143 @@ static int symsout(pieceinfo const *piece, void const *ptr)
 }
 
 /* The output function for pieces of type P_DYNAMIC. The contents are
- * displayed as an array of Elf32_Dyn structures. The values of most
- * entry types are represented as references to other fields whenever
- * possible.
+ * displayed as an array of Elf32_Dyn structures. A first pass is used
+ * to make connections between entries that have related information.
  */
 static int dynout(pieceinfo const *piece, void const *ptr)
 {
+    char		addrs[N_DT_COUNT][128];
+    int			shndx[N_DT_COUNT];
     Elf32_Dyn const    *dyn;
     unsigned int	i;
-    int			done;
-    char		strstr[128], relstr[128], relastr[128], pltrstr[128];
-    int			strndx = -1, relndx = -1, relandx = -1, pltrndx = -1;
+    int			n, done;
+
+    memset(addrs, 0, sizeof addrs);
+    memset(shndx, 0, sizeof shndx);
 
     for (i = 0, dyn = ptr ; i < piece->size / sizeof *dyn ; ++i, ++dyn) {
 	switch (dyn->d_tag) {
 	  case DT_STRTAB:
-	    strcpy(strstr, getaddrstr(dyn->d_un.d_ptr, &strndx));
+	    strcpy(addrs[N_DT_STRTAB],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_STRSZ]));
 	    break;
 	  case DT_REL:
-	    strcpy(relstr, getaddrstr(dyn->d_un.d_ptr, &relndx));
+	    strcpy(addrs[N_DT_REL],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_RELSZ]));
 	    break;
 	  case DT_RELA:
-	    strcpy(relastr, getaddrstr(dyn->d_un.d_ptr, &relandx));
+	    strcpy(addrs[N_DT_RELA],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_RELASZ]));
 	    break;
 	  case DT_JMPREL:
-	    strcpy(pltrstr, getaddrstr(dyn->d_un.d_ptr, &pltrndx));
+	    strcpy(addrs[N_DT_JMPREL],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_PLTRELSZ]));
+	    break;
+	  case DT_SYMINFO:
+	    strcpy(addrs[N_DT_SYMINFO],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_SYMINSZ]));
+	    break;
+	  case DT_INIT_ARRAY:
+	    strcpy(addrs[N_DT_INIT_ARRAY],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_INIT_ARRAYSZ]));
+	    break;
+	  case DT_FINI_ARRAY:
+	    strcpy(addrs[N_DT_FINI_ARRAY],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_FINI_ARRAYSZ]));
+	    break;
+	  case DT_PREINIT_ARRAY:
+	    strcpy(addrs[N_DT_PREINIT_ARRAY],
+		   getaddrstr(dyn->d_un.d_ptr, &shndx[N_DT_PREINIT_ARRAYSZ]));
 	    break;
 	}
     }
 
     beginblock(TRUE);
     for (i = 0, dyn = ptr ; i < piece->size / sizeof *dyn ; ++i, ++dyn) {
+	done = FALSE;
 	beginblock(FALSE);
 	out(getname(dyn->d_tag, dyntag));
-	done = FALSE;
-	switch (dyn->d_tag) {
-	  case DT_STRTAB:   outf("{ %s }", strstr);	done = TRUE;	break;
-	  case DT_REL:	    outf("{ %s }", relstr);	done = TRUE;	break;
-	  case DT_RELA:	    outf("{ %s }", relastr);	done = TRUE;	break;
-	  case DT_JMPREL:   outf("{ %s }", pltrstr);	done = TRUE;	break;
-
-	  case DT_STRSZ:
-	    outf("{ %s }", getsizestr(dyn->d_un.d_val, strndx));
+	n = getdyntagid(dyn->d_tag);
+	if (n <= 0) {
+	    outf("{ %ld }", dyn->d_un.d_val);
 	    done = TRUE;
-	    break;
-	  case DT_RELSZ:
-	    outf("{ %s }", getsizestr(dyn->d_un.d_val, relndx));
+	} else if (*addrs[n]) {
+	    outf("{ %s }", addrs[n]);
 	    done = TRUE;
-	    break;
-	  case DT_RELASZ:
-	    outf("{ %s }", getsizestr(dyn->d_un.d_val, relandx));
+	} else if (shndx[n]) {
+	    outf("{ %s }", getsizestr(dyn->d_un.d_val, shndx[n]));
 	    done = TRUE;
-	    break;
-	  case DT_PLTRELSZ:
-	    outf("{ %s }", getsizestr(dyn->d_un.d_val, pltrndx));
-	    done = TRUE;
-	    break;
-
-	  case DT_RELAENT:
-	    if (dyn->d_un.d_val == sizeof(Elf32_Rela)) {
-		out("{ sizeof(Elf32_Rela) }");
+	} else {
+	    switch (n) {
+	      case N_DT_FLAGS:
+		outf("{ %s }", getflags(dyn->d_un.d_val, dynflag));
 		done = TRUE;
+		break;
+	      case N_DT_FLAGS_1:
+		outf("{ %s }", getflags(dyn->d_un.d_val, dynflag1));
+		done = TRUE;
+		break;
+	      case N_DT_FEATURE_1:
+		outf("{ %s }", getflags(dyn->d_un.d_val, dynftrf1));
+		done = TRUE;
+		break;
+	      case N_DT_POSFLAG_1:
+		outf("{ %s }", getflags(dyn->d_un.d_val, dynposf1));
+		done = TRUE;
+		break;
+	      case N_DT_RELAENT:
+		if (dyn->d_un.d_val == sizeof(Elf32_Rela)) {
+		    out("{ sizeof(Elf32_Rela) }");
+		    done = TRUE;
+		}
+		break;
+	      case N_DT_RELENT:
+		if (dyn->d_un.d_val == sizeof(Elf32_Rel)) {
+		    out("{ sizeof(Elf32_Rel) }");
+		    done = TRUE;
+		}
+		break;
+	      case N_DT_SYMENT:
+		if (dyn->d_un.d_val == sizeof(Elf32_Sym)) {
+		    out("{ sizeof(Elf32_Sym) }");
+		    done = TRUE;
+		}
+		break;
+	      case N_DT_SYMINENT:
+		if (dyn->d_un.d_val == sizeof(Elf32_Syminfo)) {
+		    out("{ sizeof(Elf32_Syminfo) }");
+		    done = TRUE;
+		}
+		break;
+	      case N_DT_PLTREL:
+		if (dyn->d_un.d_val == DT_REL) {
+		    out("{ DT_REL }");
+		    done = TRUE;
+		} else if (dyn->d_un.d_val == DT_RELA) {
+		    out("{ DT_RELA }");
+		    done = TRUE;
+		}
+		break;
+	      case N_DT_PLTGOT:
+	      case N_DT_INIT:
+	      case N_DT_HASH:
+	      case N_DT_FINI:
+	      case N_DT_SYMTAB:
+	      case N_DT_VERSYM:
+	      case N_DT_VERDEF:
+	      case N_DT_VERNEED:
+		outf("{ %s }", getaddrstr(dyn->d_un.d_ptr, NULL));
+		done = TRUE;
+		break;
+	      default:
+		break;
 	    }
-	    break;
-	  case DT_RELENT:
-	    if (dyn->d_un.d_val == sizeof(Elf32_Rel)) {
-		out("{ sizeof(Elf32_Rel) }");
-		done = TRUE;
-	    }
-	    break;
-	  case DT_SYMENT:
-	    if (dyn->d_un.d_val == sizeof(Elf32_Sym)) {
-		out("{ sizeof(Elf32_Sym) }");
-		done = TRUE;
-	    }
-	    break;
-
-	  case DT_PLTREL:
-	    if (dyn->d_un.d_val == DT_REL) {
-		out("{ DT_REL }");
-		done = TRUE;
-	    } else if (dyn->d_un.d_val == DT_RELA) {
-		out("{ DT_RELA }");
-		done = TRUE;
-	    }
-	    break;
-
-	  case DT_PLTGOT:
-	  case DT_INIT:
-	  case DT_HASH:
-	  case DT_FINI:
-	  case DT_SYMTAB:
-	    outf("{ %s }", getaddrstr(dyn->d_un.d_ptr, NULL));
-	    done = TRUE;
-	    break;
-
-	  default:
-	    break;
 	}
 	if (!done)
 	    outf("{ %ld }", (long)dyn->d_un.d_val);
 	endblock();
     }
+
     endblock();
     return TRUE;
 }
@@ -328,7 +427,7 @@ static int relout(pieceinfo const *piece, void const *ptr)
 	beginblock(FALSE);
 	out(getaddrstr(rel->r_offset, NULL));
 	outf("ELF32_R_INFO(%u, %s)",
-		ELF32_R_SYM(rel->r_info),
+		(unsigned int)ELF32_R_SYM(rel->r_info),
 		getname(ELF32_R_TYPE(rel->r_info), reltype));
 	endblock();
     }
@@ -349,9 +448,9 @@ static int relaout(pieceinfo const *piece, void const *ptr)
 	beginblock(FALSE);
 	outword(rela->r_offset);
 	outf("ELF32_R_INFO(%u, %s)",
-		ELF32_R_SYM(rela->r_info),
+		(unsigned int)ELF32_R_SYM(rela->r_info),
 		getname(ELF32_R_TYPE(rela->r_info), reltype));
-	outf("%d", (int)rela->r_addend);
+	outf("%ld", (long)rela->r_addend);
 	endblock();
     }
     endblock();
@@ -376,10 +475,18 @@ static int ehdrout(pieceinfo const *piece, void const *ptr)
     out(getname(ehdr->e_ident[EI_CLASS], eclass));
     out(getname(ehdr->e_ident[EI_DATA], edata));
     out(getname(ehdr->e_ident[EI_VERSION], eversion));
-    for (i = EI_PAD ; i < EI_NIDENT && !ehdr->e_ident[i] ; ++i) ;
+    for (i = EI_OSABI ; i < EI_NIDENT ; ++i)
+	if (ehdr->e_ident[i])
+	    break;
     if (i != EI_NIDENT) {
-	for (i = EI_PAD ; i < EI_NIDENT ; ++i)
-	    outf("0x%02X", ehdr->e_ident[i]);
+	out(getname(ehdr->e_ident[EI_OSABI], eosabi));
+	outint(ehdr->e_ident[EI_ABIVERSION]);
+	for (i = EI_PAD ; i < EI_NIDENT ; ++i) {
+	    if (ehdr->e_ident[i])
+		outf("0x%02X", (unsigned int)ehdr->e_ident[i]);
+	    else
+		out("0");
+	}
     }
     endblock();
     out(getname(ehdr->e_type, elftype));
@@ -458,8 +565,10 @@ static int phdrsout(pieceinfo const *piece, void const *ptr)
 	    out(str);
 	else if (!phdr->p_filesz)
 	    outword(phdr->p_memsz);
+	else if (phdr->p_memsz > phdr->p_filesz)
+	    outf("%s + 0x%02lX", str, (long)phdr->p_memsz - phdr->p_filesz);
 	else
-	    outf("%s + 0x%02LX", str, (long)phdr->p_memsz - phdr->p_filesz);
+	    outword(phdr->p_memsz);
 	out(getflags(phdr->p_flags, pflags));
 	outword(phdr->p_align);
 	endblock();
@@ -510,12 +619,14 @@ static int shdrsout(pieceinfo const *piece, void const *ptr)
 				|| (int)(shdr->sh_entsize) == ctypes[s].size))
 		sprintf(buf, "sizeof(%s)", ctypes[s].name);
 	    else
-		sprintf(buf, "%u", shdr->sh_entsize);
+		sprintf(buf, "%lu", (unsigned long)shdr->sh_entsize);
 	    if (shdr->sh_size % shdr->sh_entsize == 0)
-		outf("%u * %s", shdr->sh_size / shdr->sh_entsize, buf);
+		outf("%lu * %s",
+		     (unsigned long)shdr->sh_size / shdr->sh_entsize, buf);
 	    else
-		outf("%u * %s + %u", shdr->sh_size / shdr->sh_entsize,
-				      buf, shdr->sh_size % shdr->sh_entsize);
+		outf("%lu * %s + %lu",
+		     (unsigned long)shdr->sh_size / shdr->sh_entsize, buf,
+		     (unsigned long)shdr->sh_size % shdr->sh_entsize);
 	} else if (n >= 0)
 	    out(getsizestr(shdr->sh_size, n));
 	else
@@ -538,8 +649,8 @@ static int shdrsout(pieceinfo const *piece, void const *ptr)
 }
 
 /* The output function for pieces of type P_NONEXISTENT. This type
- * does not actually represent anything in the file, but simply covers
- * any enforced padding at the end of the C structure.
+ * does not actually represent anything in the file, but simply makes
+ * padding bytes explicit.
  */
 static int nothingout(pieceinfo const *piece, void const *ptr)
 {
@@ -570,13 +681,16 @@ void beginoutpieces(void)
 
     outf("typedef struct %s\n{\n", structname);
     for (i = 0, p = pieces ; i < piecenum ; ++i, ++p) {
-	if (p->type == P_EHDR)
-	    outf("    %-20s%s;\n", ctypes[p->type].name, p->name);
+	if (p->warn)
+	    outf("    %-20s%s[%d];", ctypes[P_SECTION].name, p->name, p->size);
+	else if (p->type == P_EHDR)
+	    outf("    %-20s%s;", ctypes[p->type].name, p->name);
 	else if (p->type == P_SHDRTAB && f)
-	    outf("    %-20s%s[SHN_COUNT];\n", ctypes[p->type].name, p->name);
+	    outf("    %-20s%s[SHN_COUNT];", ctypes[p->type].name, p->name);
 	else
-	    outf("    %-20s%s[%d];\n", ctypes[p->type].name, p->name,
-				       p->size / ctypes[p->type].size);
+	    outf("    %-20s%s[%d];", ctypes[p->type].name, p->name,
+				     p->size / ctypes[p->type].size);
+	out("\n");
     }
     outf("} %s;", structname);
     out("\n\n");
@@ -591,16 +705,31 @@ void beginoutpieces(void)
  */
 void outpiece(pieceinfo const *piece, void const *contents)
 {
+    char	buf[256];
+    int		type;
+
     linebreak();
     outcomment(piece->name);
     linebreak();
-    if (contents || piece->type == P_NONEXISTENT)
-	(*outfunctions[piece->type])(piece, contents);
-    else {
+
+    type = piece->type;
+    if (piece->warn) {
+	sprintf(buf, "This section is of type %s but has the wrong %s",
+		     ctypes[type].name,
+		     (piece->warn == PW_MISALIGNED ? "alignment" :
+		      piece->warn == PW_WRONGSIZE ? "size"
+						  : "alignment and size"));
+	outcomment(buf);
+	linebreak();
+	type = P_SECTION;
+    }
+
+    if (!contents && type != P_NONEXISTENT) {
 	beginblock(FALSE);
 	outcomment("??? invalid file contents ???");
 	endblock();
-    }
+    } else
+	(*outfunctions[type])(piece, contents);
 }
 
 /* Outputs the end of the initialization.
@@ -616,8 +745,10 @@ static int (*outfunctions[P_COUNT])(pieceinfo const*, void const*) = {
     bytesout,
     bytesout,
     bytesout,
+    halvesout,
     wordsout,
-    hashout, symsout, relout, relaout, dynout,
+    noteout, hashout, symsout,
+    relout, relaout, dynout,
     shdrsout, phdrsout, ehdrout,
     nothingout
 };

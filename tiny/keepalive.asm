@@ -7,9 +7,9 @@
 
 BITS 32
 
-%define	ORIGIN		0x68070000
+%define	origin		0x68070000
   
-		org	ORIGIN
+		org	origin
   
 		db	0x7F, "ELF"		; timespec begins at the "F"
 		dd	1			; specifying 0x146 seconds
@@ -18,7 +18,7 @@ BITS 32
 ding		equ	$ - 2
 		dw	2
 		dw	3
-entry		equ	ORIGIN + ($ - $$)
+entry		equ	origin + ($ - $$)
 repeat:		xor	edx, edx		; zero edx
 		add	eax, entry << 8
 		push	dword 4

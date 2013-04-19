@@ -151,8 +151,7 @@ int stringsize(char const *str, int length)
  */
 void linebreak(void)
 {
-    static char	spaces[80] = "                                        "
-			     "                                        ";
+    static char	spaces[80];
     int		n;
 
     if (pendingseparator) {
@@ -164,9 +163,9 @@ void linebreak(void)
 	textout("\n");
     if (xpos < n) {
 	n -= xpos;
+	memset(spaces, ' ', n);
 	spaces[n] = '\0';
 	textout(spaces);
-	spaces[n] = ' ';
     }
 }
 

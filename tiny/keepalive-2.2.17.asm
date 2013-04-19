@@ -7,18 +7,18 @@
 
 BITS 32
 
-%define	ORIGIN		0x05070000
+%define	origin		0x05070000
 
-		org	ORIGIN
+		org	origin
   
 		db	0x7F, "ELF"		; timespec begins at the "F"
 		dd	1			; specifying 0x146 seconds
 		dd	0			; and 0 nanoseconds
 		dd	$$
-ding		equ	$ - 2			; the ASCII BEL character
+ding		equ	$ - 2
 		dw	2
 		dw	3
-entry		equ	ORIGIN + ($ - $$)
+entry		equ	origin + ($ - $$)
 		inc	ebx			; set ebx to 1 (stdout)
 		inc	edx			; edx gets 1, length of output
 		cmp	eax, entry << 8

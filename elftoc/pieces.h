@@ -15,12 +15,19 @@ enum
     P_UNCLAIMED = 0,				/* not referenced anywhere */
     P_BYTES,					/* generic bunch of bytes */
     P_SECTION,					/* generic section */
+    P_HALVES,					/* generic bunch of shorts */
     P_WORDS,					/* generic bunch of words */
-    P_HASH, P_SYMTAB, P_REL, P_RELA, P_DYNAMIC,	/* specific section types */
+    P_NOTE, P_HASH, P_SYMTAB,			/* specific section types */
+    P_REL, P_RELA, P_DYNAMIC,			/* specific section types */
     P_SHDRTAB, P_PHDRTAB, P_EHDR,		/* specific ELF headers */
     P_NONEXISTENT,				/* enforced struct padding */
     P_COUNT					/* the number of types */
 };
+
+/* Flags to insert warnings in the generated source code.
+ */
+#define	PW_MISALIGNED	0x0001		/* misaligned for original type */
+#define	PW_WRONGSIZE	0x0002		/* incorrect size for original type */
 
 /* The information associated with each file piece.
  */
@@ -31,6 +38,7 @@ typedef	struct pieceinfo {
     int		type;				/* the content's type */
     int		shndx;				/* associated shdr entry */
     char	name[64];			/* the piece's field name */
+    int		warn;				/* warning flags */
 } pieceinfo;
 
 /* The information describing a C type.

@@ -7,7 +7,6 @@
 #include	<stdlib.h>
 #include	<string.h>
 #include	<ctype.h>
-#include	<linux/elf.h>
 #include	"gen.h"
 #include	"addr.h"
 

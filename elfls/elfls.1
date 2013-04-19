@@ -174,11 +174,10 @@ A letter indicating the entry's type. The possible types are:
 Program data: machine language instructions or data that are part of
 the program proper.
 .TP
-\ \ U
-Uninitialized program data: memory is to be allocated as usual for
-this entry, but not initialized. The size of the entry indicates how
-much memory to allocate, but the file contains no actual data for this
-entry.
+\ \ 0
+Zero-initialized program data: memory is to be allocated as usual for
+this entry, but no data is present in the file. The memory is instead
+initialized to all bits zero.
 .TP
 \ \ S
 A table of the symbols used in the file.
@@ -201,10 +200,20 @@ The interpreter specification. Typically, this will be the pathname of
 the dynamic linker.
 .TP
 \ \ R
-A list of relocation entries.
+A list of relocation records.
 .TP
 \ \ A
-A list of relocation entries with explicit addends.
+A list of relocation records with explicit addends.
+.TP
+\ \ U
+A list of version definition records.
+.TP
+\ \ V
+A list of version dependencies for the program.
+.TP
+\ \ W
+An array of version symbol identifiers (used by the previous two
+sections).
 .TP
 \ \ N
 The note section, which typically includes the name and version number

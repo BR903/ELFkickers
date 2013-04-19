@@ -7,8 +7,8 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<string.h>
-#include	<linux/elf.h>
 #include	"gen.h"
+#include	"elf.h"
 #include	"elftoc.h"
 #include	"pieces.h"
 #include	"addr.h"
@@ -210,27 +210,57 @@ char const *getsizestr(int size, int index)
     pieceinfo  *piece = pieces + index;
     int		i;
 
-    if (index < 0 || size < piece->size) {
-	sprintf(buf, "%d", size);
-	return buf;
-    } else if (size == piece->size) {
-	sprintf(buf, "sizeof %s.%s", varname, piece->name);
-	return buf;
-    } else if (size == pieces[piecenum - 1].to) {
-	sprintf(buf, "sizeof(%s)", structname);
-	return buf;
-    } else if (size > pieces[piecenum - 1].to) {
-	sprintf(buf, "sizeof(%s) + %d",
-		     structname, size - pieces[piecenum - 1].to);
-	return buf;
-    } else if (size == pieces[piecenum - 1].to - piece->from) {
-	sprintf(buf, "sizeof(%s) - offsetof(%s, %s)",
-		     structname, structname, piece->name);
-	return buf;
-    } else if (size > pieces[piecenum - 1].to - piece->from) {
+    if (index < 0 || !size) {
 	sprintf(buf, "%d", size);
 	return buf;
     }
+
+    piece = pieces + index;
+
+    if (size == piece->size) {
+	sprintf(buf, "sizeof %s.%s", varname, piece->name);
+	return buf;
+    } else if (size > piece->size) {
+	if (size == pieces[piecenum - 1].to) {
+	    sprintf(buf, "sizeof(%s)", structname);
+	    return buf;
+	} else if (size > pieces[piecenum - 1].to) {
+	    sprintf(buf, "sizeof(%s) + %d",
+		    structname, size - pieces[piecenum - 1].to);
+	    return buf;
+	} else if (size == pieces[piecenum - 1].to - piece->from) {
+	    sprintf(buf, "sizeof(%s) - offsetof(%s, %s)",
+		    structname, structname, piece->name);
+	    return buf;
+	} else if (size > pieces[piecenum - 1].to - piece->from) {
+	    sprintf(buf, "%d", size);
+	    return buf;
+	}
+    } else {
+	if (ctypes[piece->type].size > 1) {
+	    if (size == ctypes[piece->type].size) {
+		sprintf(buf, "sizeof %s.%s[0]", varname, piece->name);
+		return buf;
+	    } else if (size % ctypes[piece->type].size == 0) {
+		sprintf(buf, "sizeof %s.%s[0] * %u", varname, piece->name,
+					size / ctypes[piece->type].size);
+		return buf;
+	    }
+	}
+	if (piece->size % size == 0) {
+	    sprintf(buf, "sizeof %s.%s / %u", varname, piece->name,
+					      piece->size / size);
+	    return buf;
+	}
+	i = piece->size - size;
+	if (i * 8 < piece->size) {
+	    sprintf(buf, "sizeof %s.%s - %d", varname, piece->name, i);
+	    return buf;
+	}
+	sprintf(buf, "%d", size);
+	return buf;
+    }
+
 
     for (i = index + 1 ; i < piecenum ; ++i) {
 	if (size == pieces[i].from - piece->from) {

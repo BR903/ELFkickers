@@ -8,7 +8,7 @@
 #include	<stdarg.h>
 #include	<unistd.h>
 #include	<getopt.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 
 #ifndef TRUE
 #define	TRUE		1
@@ -584,6 +584,7 @@ static void describeehdr(FILE *fp)
 static void describephdr(textline *line, Elf32_Phdr *phdr)
 {
     char const *str;
+    int		n;
 
     switch (phdr->p_type) {
       case PT_NULL:
@@ -601,14 +602,25 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
     if (dostrs) {
 	switch (phdr->p_type) {
 	  case PT_INTERP:
-	    append(line, "\"%s\"", getstring(phdr->p_offset,
-					     phdr->p_filesz, FALSE));
-	    return;
+	    str = getstring(phdr->p_offset, phdr->p_filesz, FALSE);
+	    if (str && *str) {
+		n = strlen(str);
+		if (n > 30)
+		    append(line, "\"%.27s...\"", str);
+		else
+		    append(line, "\"%s\"", str);
+		return;
+	    }
+	    break;
 	  case PT_NOTE:
 	    str = getstring(phdr->p_offset + 12,
 			    phdr->p_filesz - 12, FALSE);
 	    if (str && *str) {
-		append(line, "\"%s\"", str);
+		n = strlen(str);
+		if (n > 30)
+		    append(line, "\"%.27s...\"", str);
+		else
+		    append(line, "\"%s\"", str);
 		return;
 	    }
 	    break;
@@ -620,7 +632,7 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
 		 (phdr->p_flags & PF_W ? 'w' : '-'),
 		 (phdr->p_flags & PF_X ? phdr == phentry ? 's' : 'x' : '-'));
     if (dooffs)
-	append(line, "%7lX", phdr->p_offset);
+	append(line, "%6lX", phdr->p_offset);
     append(line, "%6lX %08lX",
 		 phdr->p_filesz,
 		 phdr->p_vaddr);
@@ -637,6 +649,7 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
 static void describeshdr(textline *line, Elf32_Shdr *shdr)
 {
     char const *str;
+    int		n;
 
     switch (shdr->sh_type) {
       case SHT_NULL:
@@ -651,7 +664,11 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 		if (dostrs) {
 		    str = getstring(shdr->sh_offset, shdr->sh_size, TRUE);
 		    if (str && *str) {
-			append(line, "\"%s\"", str);
+			n = strlen(str);
+			if (n > 30)
+			    append(line, "\"%.27s...\"", str);
+			else
+			    append(line, "\"%s\"", str);
 			return;
 		    }
 		}
@@ -661,7 +678,11 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 		if (dostrs) {
 		    str = getstring(shdr->sh_offset, shdr->sh_size, FALSE);
 		    if (str && *str) {
-			append(line, "\"%s\"", str);
+			n = strlen(str);
+			if (n > 30)
+			    append(line, "\"%.27s...\"", str);
+			else
+			    append(line, "\"%s\"", str);
 			return;
 		    }
 		}
@@ -671,23 +692,36 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 	append(line, "P ");
 	break;
 
-      case SHT_NOTE:	append(line, "N ");	break;
-      case SHT_STRTAB:	append(line, "$ ");	break;
-      case SHT_SYMTAB:	append(line, "S ");	break;
-      case SHT_DYNSYM:	append(line, "D ");	break;
-      case SHT_DYNAMIC:	append(line, "L ");	break;
-      case SHT_REL:	append(line, "R ");	break;
-      case SHT_RELA:	append(line, "A ");	break;
-      case SHT_HASH:	append(line, "H ");	break;
-      case SHT_NOBITS:	append(line, "U ");	break;
-      default:		append(line, "? ");	break;
+      case SHT_NOTE:		append(line, "N ");	break;
+      case SHT_STRTAB:		append(line, "$ ");	break;
+      case SHT_SYMTAB:		append(line, "S ");	break;
+      case SHT_DYNSYM:		append(line, "D ");	break;
+      case SHT_DYNAMIC:		append(line, "L ");	break;
+      case SHT_REL:		append(line, "R ");	break;
+      case SHT_RELA:		append(line, "A ");	break;
+      case SHT_HASH:		append(line, "H ");	break;
+      case SHT_NOBITS:		append(line, "0 ");	break;
+#ifdef SHT_GNU_verdef
+      case SHT_GNU_verdef:	append(line, "U ");	break;
+#endif
+#ifdef SHT_GNU_verneed
+      case SHT_GNU_verneed:	append(line, "V ");	break;
+#endif
+#ifdef SHT_GNU_versym
+      case SHT_GNU_versym:	append(line, "W ");	break;
+#endif
+      default:			append(line, "? ");	break;
     }
 
     if (dostrs) {
 	if (shdr->sh_type == SHT_NOTE) {
 	    str = getstring(shdr->sh_offset + 12, shdr->sh_size - 12, FALSE);
 	    if (str && *str) {
-		append(line, "\"%s\"", str);
+		n = strlen(str);
+		if (n > 30)
+		    append(line, "\"%.27s...\"", str);
+		else
+		    append(line, "\"%s\"", str);
 		return;
 	    }
 	}
@@ -698,7 +732,7 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 		 (shdr->sh_flags & SHF_WRITE ? 'w' : '-'),
 		 (shdr->sh_flags & SHF_EXECINSTR ? 'x' : '-'));
     if (dooffs)
-	append(line, "%7lX", shdr->sh_offset);
+	append(line, "%6lX", shdr->sh_offset);
     append(line, "%6lX %s", shdr->sh_size,
 			    sectstr ? sectstr + shdr->sh_name : "(n/a)");
     if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
@@ -798,7 +832,7 @@ int main(int argc, char *argv[])
 	    putchar('\n');
 	    lines = gettextlines(elffhdr.e_phnum);
 	    for (i = 0 ; i < elffhdr.e_phnum ; ++i) {
-		append(lines + i, "%3d ", i);
+		append(lines + i, "%2d ", i);
 		describephdr(lines + i, proghdr + i);
 	    }
 	    formatlist(stdout, lines, elffhdr.e_phnum);
@@ -815,7 +849,7 @@ int main(int argc, char *argv[])
 	    putchar('\n');
 	    lines = gettextlines(elffhdr.e_shnum);
 	    for (i = 0 ; i < elffhdr.e_shnum ; ++i) {
-		append(lines + i, "%3d ", i);
+		append(lines + i, "%2d ", i);
 		describeshdr(lines + i, secthdr + i);
 	    }
 	    formatlist(stdout, lines, elffhdr.e_shnum);

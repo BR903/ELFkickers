@@ -7,7 +7,7 @@
 #ifndef	_shdrtab_h_
 #define	_shdrtab_h_
 
-#include	<linux/elf.h>
+#include	"elf.h"
 
 /* Initializes the section header table (this function must be called
  * before any of the others in this module), and assigns each section
