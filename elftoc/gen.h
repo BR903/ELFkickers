@@ -1,28 +1,41 @@
-/* gen.h: Generic functions and definitions used by all modules.
- *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+/* gen.h: Generic functions and definitions used throughout.
+ * Copyright (C) 1999,2011 by Brian Raiter <breadbox@muppetlabs.com>
+ * License GPLv2+: GNU GPL version 2 or later.
+ * This is free software; you are free to change and redistribute it.
+ * There is NO WARRANTY, to the extent permitted by law.
  */
-
 #ifndef	_gen_h_
 #define	_gen_h_
 
-#include	<stdio.h>
-#include	<stdlib.h>
-
 #ifndef TRUE
-#define	TRUE		1
-#define	FALSE		0
+#define	TRUE	1
+#define	FALSE	0
 #endif
 
-/* The memory allocation macro. If memory is unavailable, the program
- * is aborted.
+/* These functions display error message. err() always returns zero;
+ * fail() exits the program. warn() adds the text "warning:" to the
+ * message, and prints nothing if warnings are disabled.
  */
-#define	xalloc(p, n)	(((p) = realloc((p), (n))) ? (p) : (err(NULL), NULL))
-
-/* Prints a message on stderr and returns FALSE. If fmt is NULL, prints
- * an out-of-memory error and aborts the program.
- */
+extern int warn(char const *fmt, ...);
 extern int err(char const *fmt, ...);
+extern void fail(char const *fmt, ...);
+
+/* These functions set a program name and a file name, respectively,
+ * to prefix error messages.
+ */
+extern void setprogramname(char const *str);
+extern void setfilename(char const *str);
+
+/* This function turns the display of warnings on or off.
+ */
+extern void enablewarnings(int flag);
+
+/* Memory allocation functions. These functions either succeed or exit
+ * the program.
+ */
+extern void *allocate(unsigned int size);
+extern void *reallocate(void *ptr, unsigned int size);
+extern char *strallocate(char const *str);
+extern void deallocate(void *ptr);
 
 #endif

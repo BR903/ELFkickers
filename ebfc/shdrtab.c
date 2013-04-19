@@ -5,7 +5,7 @@
  */
 
 #include	<stdlib.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 
@@ -26,7 +26,7 @@ static void init(elfpart *part, blueprint const *bp)
     Elf32_Shdr	       *shdr;
     int			i;
 
-    ((Elf32_Ehdr*)bp->parts[0].part)->e_shoff = (Elf32_Off)part;
+    ((Elf32_Ehdr*)bp->parts[0].part)->e_shoff = (Elf32_Off)(long)part;
 
     for (i = 0 ; i < bp->partcount ; ++i)
 	if (bp->parts[i].shtype > 0 && !bp->parts[i].done)

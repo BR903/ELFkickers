@@ -5,7 +5,7 @@
  */
 
 #include	<stdlib.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 
@@ -42,13 +42,13 @@ static void complete(elfpart *part, blueprint const *bp)
     elfpart    *p;
 
     if (ehdr->e_phoff) {
-	p = (elfpart*)ehdr->e_phoff;
+	p = (elfpart*)(long)ehdr->e_phoff;
 	ehdr->e_phoff = p->offset;
 	ehdr->e_phnum = p->count;
 	ehdr->e_phentsize = p->entsize;
     }
     if (ehdr->e_shoff) {
-	p = (elfpart*)ehdr->e_shoff;
+	p = (elfpart*)(long)ehdr->e_shoff;
 	ehdr->e_shoff = p->offset;
 	ehdr->e_shnum = p->count;
 	ehdr->e_shentsize = p->entsize;

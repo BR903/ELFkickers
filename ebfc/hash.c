@@ -6,7 +6,7 @@
 
 #include	<stdlib.h>
 #include	<string.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 
@@ -64,6 +64,7 @@ static void complete(elfpart *part, blueprint const *bp)
     unsigned char const	       *name;
     Elf32_Word			bucketnum;
     Elf32_Word			hash;
+    Elf32_Sword			n;
     int				i;
 
     if (!part->link->done)
@@ -79,10 +80,11 @@ static void complete(elfpart *part, blueprint const *bp)
 	    hash = (hash << 4) + *name;
 	    hash = (hash ^ ((hash & 0xF0000000) >> 24)) & 0x0FFFFFFF;
 	}
-	hash = hash % bucketnum - bucketnum;
-	while (chain[hash])
-	    hash = chain[hash];
-	chain[hash] = i;
+	hash = hash % bucketnum;
+	n = hash - bucketnum;
+	while (chain[n])
+	    n = chain[n];
+	chain[n] = i;
     }
 
     part->done = TRUE;

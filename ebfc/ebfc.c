@@ -14,7 +14,7 @@
 #include	<fcntl.h>
 #include	<sys/stat.h>
 #include	<getopt.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"ebfc.h"
 

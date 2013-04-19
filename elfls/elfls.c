@@ -1,79 +1,105 @@
-/* elfls: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
- * General Public License. No warranty. See COPYING for details.
+/* elfls: Copyright (C) 1999,2011 by Brian Raiter <breadbox@muppetlabs.com>
+ * License GPLv2+: GNU GPL version 2 or later.
+ * This is free software; you are free to change and redistribute it.
+ * There is NO WARRANTY, to the extent permitted by law.
  */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <unistd.h>
+#include <getopt.h>
+#include <elf.h>
 
-#include	<stdio.h>
-#include	<stdlib.h>
-#include	<errno.h>
-#include	<stdarg.h>
-#include	<unistd.h>
-#include	<getopt.h>
-#include	<elf.h>
+#include "elfrw.h"
 
 #ifndef TRUE
-#define	TRUE		1
-#define	FALSE		0
+#define	TRUE	1
+#define	FALSE	0
 #endif
 
 /* Memory allocation error message.
  */
-#define	nomem()		(fputs("Out of memory!\n", stderr), exit(EXIT_FAILURE))
+#define nomem() (fputs("Out of memory!\n", stderr), exit(EXIT_FAILURE))
 
 /* Structure used to organize strings to be displayed in a list.
  */
 typedef	struct textline {
-    char       *str;		/* the string to display		*/
-    int		size;		/* the current length of the string	*/
-    int		left;		/* how much more the string can grow	*/
+    char       *str;	/* the string to display */
+    int		size;	/* the current length of the string */
+    int		left;	/* how much more the string can grow */
 } textline;
 
 /* The online help text.
  */
-static char const      *yowzitch = 
-	"Usage: elfls [-hvEcdPSip] [-w N] FILE...\n"
-	"   -h  Display this help\n"
-	"   -v  Display version information\n"
-	"   -c  Include source file display\n"
-	"   -d  Include dependencies display\n"
-	"   -P  Suppress program header table display\n"
-	"   -S  Suppress section header table display\n"
-	"   -E  Skip ELF identifier verification\n"
-	"   -i  Don't display some contents\n"
-	"   -p  Don't display file positions\n"
-	"   -w  Set maximum width of output\n";
+static char const *yowzitch = 
+    "Usage: elfls [OPTIONS] FILE...\n"
+    "Display information about the contents of ELF files.\n\n"
+    "  -c, --sources       Display list of source files.\n"
+    "  -d, --dependencies  Display list of dependencies.\n"
+    "  -P, --nophdr        Omit the program header table.\n"
+    "  -S, --noshdr        Omit the section header table.\n"
+    "  -i, --nostr         Don't display some section contents.\n"
+    "  -p, --nopos         Omit file position column.\n"
+    "  -w, --width=N       Set maximum width of output.\n"
+    "      --help          Display this help and exit.\n"
+    "      --version       Display version information and exit.\n";
 
 /* The version text.
  */
-static char const      *vourzhon =
-	"elfls, v1.0.0.0.0.0.0.0.0.0: Copyright (C) 1999 by Brian Raiter.\n";
+static char const *vourzhon =
+    "elfls: version 1.1\n"
+    "Copyright (C) 1999,2011 by Brian Raiter <breadbox@muppetlabs.com>\n"
+    "License GPLv2+: GNU GPL version 2 or later.\n"
+    "This is free software; you are free to change and redistribute it.\n"
+    "There is NO WARRANTY, to the extent permitted by law.\n";
 
-/*
- * Global variables
+/* The global variables.
  */
+static Elf64_Ehdr	elffhdr;	/* ELF header of current file */
+static Elf64_Phdr      *proghdr = NULL;	/* program header table */
+static Elf64_Shdr      *secthdr = NULL;	/* section header table */
+static char	       *sectstr = NULL;	/* sh string table */
 
-static Elf32_Ehdr	elffhdr;	/* ELF header of current file	*/
-static Elf32_Phdr      *proghdr = NULL;	/* program header table		*/
-static Elf32_Shdr      *secthdr = NULL;	/* section header table		*/
-static char	       *sectstr = NULL;	/* sh string table		*/
+static int		proghdrs;	/* FALSE if no ph table */
+static int		secthdrs;	/* FALSE if no sh table */
+static Elf64_Phdr      *phentry = NULL;	/* ph with the entry point */
+static Elf64_Shdr      *shshstr = NULL;	/* sh with the sh string table */
 
-static int		proghdrs;	/* FALSE if no ph table		*/
-static int		secthdrs;	/* FALSE if no sh table		*/
-static Elf32_Phdr      *phentry = NULL;	/* ph with the entry point	*/
-static Elf32_Shdr      *shshstr = NULL;	/* sh with the sh string table	*/
+static char const      *programname;	/* name of this program */
+static char const      *thefilename;	/* name of current file */
+static FILE	       *thefile;	/* handle to current file */
 
-static char const      *thisprog;	/* name of this program		*/
-static char const      *thefilename;	/* name of current file		*/
-static FILE	       *thefile;	/* handle to current file	*/
+static int		phdrls = TRUE;	/* TRUE = show ph table */
+static int		shdrls = TRUE;	/* TRUE = show sh table */
+static int		srcfls = FALSE;	/* TRUE = show source files */
+static int		ldepls = FALSE;	/* TRUE = show libraries */
+static int		dostrs = TRUE;	/* TRUE = show entry strings */
+static int		dooffs = TRUE;	/* TRUE = show file offsets */
 
-static int		skipID = FALSE;	/* TRUE = skip ID check		*/
-static int		phdrls = TRUE;	/* TRUE = show ph table		*/
-static int		shdrls = TRUE;	/* TRUE = show sh table		*/
-static int		srcfls = FALSE;	/* TRUE = show source files	*/
-static int		ldepls = FALSE;	/* TRUE = show libraries	*/
-static int		dostrs = TRUE;	/* TRUE = show entry strings	*/
-static int		dooffs = TRUE;	/* TRUE = show file offsets	*/
+static char		sizefmt[8];	/* num digits to show sizes */
+static char		addrfmt[8];	/* num digits to show addresses */
+static char		offsetfmt[8];	/* num digits to show offsets */
+static int		outwidth;	/* maximum width of output */
 
-static int		outwidth;	/* maximum width of output	*/
+/* The error-reporting function.
+ */
+static int err(char const *fmt, ...)
+{
+    va_list args;
+
+    fprintf(stderr, "%s: ", programname);
+    if (fmt) {
+	va_start(args, fmt);
+	vfprintf(stderr, fmt, args);
+	va_end(args);
+    } else {
+	fprintf(stderr, "%s: %s", thefilename, strerror(errno));
+    }
+    fputc('\n', stderr);
+    return 0;
+}
 
 /*
  * List output formatting functions.
@@ -141,14 +167,14 @@ static void formatlist(FILE *fp, textline *lines, int count)
     int		colx, dy;
     int		i, j;
 
-    colx = 0;
+    colx = 1;
     for (i = 0, line = lines ; i < count ; ++i, ++line) {
 	if (line->size > colx)
 	    colx = line->size;
     }
     if (outwidth) {
 	i = (outwidth - 1) / colx;
-	dy = (count + i - 1) / i;
+	dy = i ? (count + i - 1) / i : count;
 	colx = -(colx + 1);
     } else {
 	dy = count;
@@ -260,42 +286,20 @@ static char const *getstring(unsigned long offset, unsigned long size,
 /* Verify that the given ELF identifier is appropriate to our
  * expectations.
  */
-static int checkelfident(char const id[EI_NIDENT])
+static int checkelfident(unsigned char const id[EI_NIDENT])
 {
-    int	bigendian;
+    if (memcmp(id, ELFMAG, SELFMAG))
+	return err("%s: not an ELF file.", thefilename);
+    if (id[EI_CLASS] != ELFCLASS32 && id[EI_CLASS] != ELFCLASS64)
+	return err("%s: unrecognized ELF class: %d.",
+		   thefilename, (int)id[EI_CLASS]);
+    if (id[EI_DATA] != ELFDATA2MSB && id[EI_DATA] != ELFDATA2LSB)
+	return err("%s: unrecognized ELF data: %d.",
+		   thefilename, id[EI_DATA]);
+    if (id[EI_VERSION] != EV_CURRENT)
+	return err("%s: unrecognized ELF version: %d.",
+		   thefilename, (int)id[EI_VERSION]);
 
-    if (id[EI_MAG0] != ELFMAG0 || id[EI_MAG1] != ELFMAG1
-			       || id[EI_MAG2] != ELFMAG2
-			       || id[EI_MAG3] != ELFMAG3) {
-	fprintf(stderr, "%s: not an ELF file.\n", thefilename);
-	return FALSE;
-    }
-    if (skipID)
-	return TRUE;
-    if (id[EI_CLASS] != ELFCLASS32) {
-	fprintf(stderr, "%s: not a 32-bit ELF file "
-			"(class = %d instead of %d).\n",
-			thefilename, (int)(unsigned char)id[EI_CLASS],
-			ELFCLASS32);
-	return FALSE;
-    }
-    bigendian = TRUE;
-    *(char*)&bigendian = 0;
-    if (id[EI_DATA] != (bigendian ? ELFDATA2MSB : ELFDATA2LSB)) {
-	fprintf(stderr, "%s: not %s-endian "
-			"(data = %d instead of %d).\n",
-			thefilename, (bigendian ? "big" : "little"),
-			(int)(unsigned char)id[EI_DATA],
-			(bigendian ? ELFDATA2MSB : ELFDATA2LSB));
-	return FALSE;
-    }
-    if (id[EI_VERSION] != EV_CURRENT) {
-	fprintf(stderr, "%s: unknown ELF version "
-			"(version = %d instead of %d).\n",
-			thefilename, (int)(unsigned char)id[EI_VERSION],
-			EV_CURRENT);
-	return FALSE;
-    }
     return TRUE;
 }
 
@@ -304,37 +308,49 @@ static int checkelfident(char const id[EI_NIDENT])
  */
 static int readelfhdr(void)
 {
-    errno = 0;
-    if (fread(&elffhdr, sizeof elffhdr, 1, thefile) != 1) {
-	if (errno)
-	    perror(thefilename);
+    if (elfrw_read_Ehdr(thefile, &elffhdr) != 1) {
+	if (ferror(thefile))
+	    return err(NULL);
 	else
-	    fprintf(stderr, "%s: not an ELF file.\n", thefilename);
-	return FALSE;
+	    return err("%s: not an ELF file.", thefilename);
     }
     if (!checkelfident(elffhdr.e_ident))
 	return FALSE;
+
     switch (elffhdr.e_type) {
       case ET_REL:
       case ET_EXEC:
       case ET_DYN:
-	return TRUE;
+      case ET_CORE:
+	break;
       default:
-	fprintf(stderr, "%s: unknown ELF file type (type = %u).\n",
-			thefilename, elffhdr.e_type);
-	return FALSE;
+	return err("%s: unknown ELF file type (type = %u).",
+		   thefilename, elffhdr.e_type);
     }
-    if (elffhdr.e_version != EV_CURRENT) {
-	fprintf(stderr, "%s: unknown ELF header version "
-			"(version = %u instead of %u).\n",
-			thefilename, (unsigned int)elffhdr.e_version,
-			(unsigned int)EV_CURRENT);
-	return FALSE;
+    if (elffhdr.e_ehsize != sizeof(Elf32_Ehdr) &&
+			elffhdr.e_ehsize != sizeof(Elf64_Ehdr))
+	return err("%s: warning: unrecognized ELF header size: %d.",
+		   thefilename, elffhdr.e_ehsize);
+    if (elffhdr.e_version != EV_CURRENT)
+	return err("%s: unrecognized ELF header version: %u.",
+		   thefilename, (unsigned int)elffhdr.e_version);
+
+    if (elffhdr.e_phoff != 0) {
+	if (elffhdr.e_phentsize != sizeof(Elf32_Phdr) &&
+			elffhdr.e_phentsize != sizeof(Elf64_Phdr))
+	    err("%s: unrecognized program header entry size: %u.",
+		thefilename, elffhdr.e_phentsize);
+	else
+	    proghdrs = 1;
     }
-    if (elffhdr.e_ehsize != sizeof elffhdr)
-	fprintf(stderr, "%s: warning: unrecognized ELF header size "
-			"(size = %u instead of %u).\n",
-			thefilename, elffhdr.e_ehsize, sizeof elffhdr);
+    if (elffhdr.e_shoff != 0) {
+	if (elffhdr.e_shentsize != sizeof(Elf32_Shdr) &&
+			elffhdr.e_shentsize != sizeof(Elf64_Shdr))
+	    err("%s: unrecognized section header entry size: %u.",
+		thefilename, elffhdr.e_shentsize);
+	else
+	    secthdrs = 1;
+    }
     return TRUE;
 }
 
@@ -345,39 +361,26 @@ static int readelfhdr(void)
  */
 static int readproghdrs(void)
 {
-    char       *buf;
-    size_t	n;
+    int i, n;
 
-    if (!(proghdrs = elffhdr.e_phoff != 0))
+    if (!proghdrs)
 	return TRUE;
-    n = elffhdr.e_phnum * elffhdr.e_phentsize;
-    if (!(buf = getarea(elffhdr.e_phoff, n))) {
-	fprintf(stderr, "%s: warning: invalid program header table offset.\n",
-			thefilename);
+    n = elffhdr.e_phnum;
+    if (!(proghdr = malloc(n * sizeof *proghdr)))
+	nomem();
+    if (fseek(thefile, elffhdr.e_phoff, SEEK_SET) ||
+			elfrw_read_Phdrs(thefile, proghdr, n) != n) {
+	err("%s: invalid program header table offset.", thefilename);
 	proghdrs = FALSE;
 	return TRUE;
     }
-    if (elffhdr.e_phentsize == sizeof *proghdr)
-	proghdr = (Elf32_Phdr*)buf;
-    else {
-	fprintf(stderr, "%s: warning: unrecognized program header entry size "
-			"(size = %u instead of %u).\n",
-			thefilename, elffhdr.e_phentsize, sizeof *proghdr);
-	if (!(proghdr = calloc(elffhdr.e_phnum, sizeof *proghdr)))
-	    nomem();
-	for (n = 0 ; n < elffhdr.e_phnum ; ++n) 
-	    memcpy(proghdr + n, buf + n * elffhdr.e_phentsize,
-				sizeof *proghdr);
-	free(buf);
-    }
-
     if (elffhdr.e_entry) {
-	for (n = 0 ; n < elffhdr.e_phnum ; ++n) {
-	    if (proghdr[n].p_type == PT_LOAD
-			&& elffhdr.e_entry >= proghdr[n].p_vaddr
-			&& elffhdr.e_entry < proghdr[n].p_vaddr
-						 + proghdr[n].p_memsz) {
-		phentry = proghdr + n;
+	for (i = 0 ; i < n ; ++i) {
+	    if (proghdr[i].p_type == PT_LOAD
+			&& elffhdr.e_entry >= proghdr[i].p_vaddr
+			&& elffhdr.e_entry < proghdr[i].p_vaddr
+						 + proghdr[i].p_memsz) {
+		phentry = proghdr + i;
 		break;
 	    }
 	}
@@ -392,36 +395,23 @@ static int readproghdrs(void)
  */
 static int readsecthdrs(void)
 {
-    char       *buf;
-    size_t	n;
+    int n;
 
-    if (!(secthdrs = elffhdr.e_shoff != 0))
+    if (!secthdrs)
 	return TRUE;
-    n = elffhdr.e_shnum * elffhdr.e_shentsize;
-    if (!(buf = getarea(elffhdr.e_shoff, n))) {
-	fprintf(stderr, "%s: warning: invalid section header table offset.\n",
-			thefilename);
+    n = elffhdr.e_shnum;
+    if (!(secthdr = malloc(n * sizeof *secthdr)))
+	nomem();
+    if (fseek(thefile, elffhdr.e_shoff, SEEK_SET) ||
+			elfrw_read_Shdrs(thefile, secthdr, n) != n) {
+	err("%s: warning: invalid section header table offset.", thefilename);
 	secthdrs = FALSE;
 	return TRUE;
     }
-    if (elffhdr.e_shentsize == sizeof *secthdr)
-	secthdr = (Elf32_Shdr*)buf;
-    else {
-	fprintf(stderr, "%s: warning: unrecognized section header entry size "
-			"(size = %u instead of %u).\n",
-			thefilename, elffhdr.e_shentsize, sizeof *secthdr);
-	if (!(secthdr = calloc(elffhdr.e_shnum, sizeof *secthdr)))
-	    nomem();
-	for (n = 0 ; n < elffhdr.e_shnum ; ++n) 
-	    memcpy(secthdr + n, buf + n * elffhdr.e_shentsize,
-				sizeof *secthdr);
-    }
-
     if (elffhdr.e_shstrndx != SHN_UNDEF) {
 	shshstr = secthdr + elffhdr.e_shstrndx;
 	if (!(sectstr = getarea(shshstr->sh_offset, shshstr->sh_size))) {
-	    fprintf(stderr, "%s: warning: invalid string table location.\n",
-			    thefilename);
+	    err("%s: warning: invalid string table location.", thefilename);
 	    free(sectstr);
 	    sectstr = NULL;
 	}
@@ -436,7 +426,7 @@ static int readsecthdrs(void)
  */
 static int getsrcfiles(textline **plines)
 {
-    Elf32_Sym  *syms;
+    Elf64_Sym  *syms;
     char       *nmstr;
     textline   *lines;
     char       *str;
@@ -451,16 +441,24 @@ static int getsrcfiles(textline **plines)
     if (i == elffhdr.e_shnum)
 	return 0;
 
-    if (!(syms = getarea(secthdr[i].sh_offset, secthdr[i].sh_size)))
-	return 0;
+    count = secthdr[i].sh_size / secthdr[i].sh_entsize;
     strtab = secthdr[i].sh_link;
-    if (!(nmstr = getarea(secthdr[strtab].sh_offset, secthdr[strtab].sh_size)))
+    if (!(syms = malloc(count * sizeof *syms)))
+	nomem();
+    if (fseek(thefile, secthdr[i].sh_offset, SEEK_SET))
+	return err("%s: invalid symbol table offset.", thefilename);
+    count = elfrw_read_Syms(thefile, syms, count);
+    if (!count)
 	return 0;
-    count = secthdr[i].sh_size / sizeof *syms;
+    nmstr = getarea(secthdr[strtab].sh_offset, secthdr[strtab].sh_size);
+    if (!nmstr) {
+	free(syms);
+	return 0;
+    }
     lines = gettextlines(count);
     n = 0;
     for (i = 0 ; i < count ; ++i) {
-	if (ELF32_ST_TYPE(syms[i].st_info) != STT_FILE)
+	if (ELF64_ST_TYPE(syms[i].st_info) != STT_FILE)
 	    continue;
 	str = nmstr + syms[i].st_name;
 	for (j = 0 ; j < n ; ++j)
@@ -488,11 +486,12 @@ static int getsrcfiles(textline **plines)
  */
 static int getlibraries(textline **plines)
 {
-    Elf32_Dyn  *dyns;
+    Elf64_Dyn  *dyns;
     char       *nmstr;
     textline   *lines;
     char       *str;
-    unsigned	strtab = 0, strsz = 0, count, i, j, n;
+    unsigned long strtab = 0, strsz = 0;
+    unsigned	count, i, j, n;
 
     if (!proghdrs)
 	return 0;
@@ -502,9 +501,14 @@ static int getlibraries(textline **plines)
     if (i == elffhdr.e_phnum)
 	return 0;
 
-    if (!(dyns = getarea(proghdr[i].p_offset, proghdr[i].p_filesz)))
-	return 0;
     count = proghdr[i].p_filesz / sizeof *dyns;
+    if (!(dyns = malloc(count * sizeof *dyns)))
+	nomem();
+    if (fseek(thefile, proghdr[i].p_offset, SEEK_SET))
+	return err("%s: invalid dynamic table offset.", thefilename);
+    count = elfrw_read_Dyns(thefile, dyns, count);
+    if (!count)
+	return 0;
     n = 0;
     for (i = 0 ; i < count ; ++i) {
 	if (dyns[i].d_tag == DT_STRTAB)
@@ -550,6 +554,44 @@ static int getlibraries(textline **plines)
  * Output-generating functions.
  */
 
+/* Determine how wide the size and offset columns need to be.
+ */
+static void makenumberfmts(void)
+{
+    unsigned long maxsize, maxaddr, maxoffset;
+    int i;
+
+    maxsize = 0;
+    maxoffset = 0;
+    maxaddr = 0;
+    for (i = 0 ; i < elffhdr.e_phnum ; ++i) {
+	if (maxsize < proghdr[i].p_filesz)
+	    maxsize = proghdr[i].p_filesz;
+	if (maxoffset < proghdr[i].p_offset)
+	    maxoffset = proghdr[i].p_offset;
+	if (maxaddr < proghdr[i].p_vaddr)
+	    maxaddr = proghdr[i].p_vaddr;
+    }
+    for (i = 0 ; i < elffhdr.e_shnum ; ++i) {
+	if (maxsize < secthdr[i].sh_size)
+	    maxsize = secthdr[i].sh_size;
+	if (maxoffset < secthdr[i].sh_offset)
+	    maxoffset = secthdr[i].sh_offset;
+    }
+    maxsize >>= 20;
+    for (i = 6 ; maxsize ; ++i, maxsize >>= 4) ;
+    sprintf(sizefmt, "%%%dlX", i);
+    maxoffset >>= 20;
+    for (i = 6 ; maxoffset ; ++i, maxoffset >>= 4) ;
+    sprintf(offsetfmt, "%%%dlX", i);
+    maxaddr >>= 16;
+    maxaddr >>= 16;
+    for (i = 8 ; maxaddr ; ++i, maxaddr >>= 4) ;
+    sprintf(addrfmt, "%%0%dlX", i);
+}
+
+/* Display a one-line description of the ELF file.
+ */
 static void describeehdr(FILE *fp)
 {
     fprintf(fp, "%s", thefilename);
@@ -558,17 +600,25 @@ static void describeehdr(FILE *fp)
       case ET_REL:						break;
       case ET_EXEC:	fputc('*', fp);				break;
       case ET_DYN:	fputc('&', fp);				break;
+      case ET_CORE:	fputc('$', fp);				break;
       default:		fprintf(fp, "?(%u)", elffhdr.e_type);	break;
     }
 
     switch (elffhdr.e_machine) {
       case EM_M32:	fprintf(fp, " (AT&T M32)");		break;
       case EM_386:	fprintf(fp, " (Intel 386)");		break;
+      case EM_X86_64:	fprintf(fp, " (Intel x86-64)");		break;
       case EM_860:	fprintf(fp, " (Intel 860)");		break;
       case EM_MIPS:	fprintf(fp, " (MIPS)");			break;
       case EM_68K:	fprintf(fp, " (Motorola 68k)");		break;
       case EM_88K:	fprintf(fp, " (Motorola 88k)");		break;
       case EM_SPARC:	fprintf(fp, " (SPARC)");		break;
+      case EM_S390:	fprintf(fp, " (IBM S390)");		break;
+      case EM_ALPHA:	fprintf(fp, " (Digital Alpha)");	break;
+      case EM_ARM:	fprintf(fp, " (ARM)");			break;
+      case EM_PARISC:	fprintf(fp, " (HPPA)");			break;
+      case EM_PPC:	fprintf(fp, " (PowerPC)");		break;
+      case EM_PPC64:	fprintf(fp, " (64-bit PowerPC)");	break;
       default:		fprintf(fp, " (?%u)", elffhdr.e_machine); break;
     }
 
@@ -581,22 +631,24 @@ static void describeehdr(FILE *fp)
  * offset and size within the file, and the virtual address at which
  * to load the contents.
  */
-static void describephdr(textline *line, Elf32_Phdr *phdr)
+static void describephdr(textline *line, Elf64_Phdr *phdr)
 {
     char const *str;
     int		n;
 
     switch (phdr->p_type) {
-      case PT_NULL:
-	append(line, "(null)");
-	return;
+      case PT_NULL:	    append(line, "(null)");	return;
+      case PT_INTERP:	    append(line, "I ");		break;
+      case PT_NOTE:	    append(line, "N ");		break;
+      case PT_LOAD:	    append(line, "B ");		break;
+      case PT_PHDR:	    append(line, "P ");		break;
+      case PT_DYNAMIC:	    append(line, "D ");		break;
+      case PT_TLS:	    append(line, "T ");		break;
+      case PT_GNU_EH_FRAME: append(line, "U ");		break;
+      case PT_GNU_STACK:    append(line, ". ");		break;
+      case PT_GNU_RELRO:    append(line, "R ");		break;
+      default:		    append(line, "? ");		break;
 
-      case PT_INTERP:	append(line, "I ");	break;
-      case PT_NOTE:	append(line, "N ");	break;
-      case PT_LOAD:	append(line, "P ");	break;
-      case PT_PHDR:	append(line, "T ");	break;
-      case PT_DYNAMIC:	append(line, "L ");	break;
-      default:		append(line, "? ");	break;
     }
 
     if (dostrs) {
@@ -613,15 +665,17 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
 	    }
 	    break;
 	  case PT_NOTE:
-	    str = getstring(phdr->p_offset + 12,
-			    phdr->p_filesz - 12, FALSE);
-	    if (str && *str) {
-		n = strlen(str);
-		if (n > 30)
-		    append(line, "\"%.27s...\"", str);
-		else
-		    append(line, "\"%s\"", str);
-		return;
+	    if (phdr->p_filesz > 12) {
+		str = getstring(phdr->p_offset + 12,
+				phdr->p_filesz - 12, FALSE);
+		if (str && *str) {
+		    n = strlen(str);
+		    if (n > 30)
+			append(line, "\"%.27s...\"", str);
+		    else
+			append(line, "\"%s\"", str);
+		    return;
+		}
 	    }
 	    break;
 	}
@@ -632,10 +686,10 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
 		 (phdr->p_flags & PF_W ? 'w' : '-'),
 		 (phdr->p_flags & PF_X ? phdr == phentry ? 's' : 'x' : '-'));
     if (dooffs)
-	append(line, "%6lX", phdr->p_offset);
-    append(line, "%6lX %08lX",
-		 phdr->p_filesz,
-		 phdr->p_vaddr);
+	append(line, sizefmt, phdr->p_offset);
+    append(line, sizefmt, phdr->p_filesz);
+    append(line, " ");
+    append(line, addrfmt, phdr->p_vaddr);
     if (phdr->p_filesz != phdr->p_memsz)
 	append(line, " +%lX", phdr->p_memsz - phdr->p_filesz);
 }
@@ -646,7 +700,7 @@ static void describephdr(textline *line, Elf32_Phdr *phdr)
  * within the file, and the section name and the indices of any
  * related sections.
  */
-static void describeshdr(textline *line, Elf32_Shdr *shdr)
+static void describeshdr(textline *line, Elf64_Shdr *shdr)
 {
     char const *str;
     int		n;
@@ -687,29 +741,37 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 		    }
 		}
 		break;
+	    } else if (!strcmp(str, ".plt") || !strcmp(str, ".got.plt")) {
+		append(line, "P ");
+		break;
+	    } else if (!strcmp(str, ".got")) {
+		append(line, "O ");
+		break;
+	    } else if (!memcmp(str, ".debug_", 7)) {
+		append(line, "G ");
+		break;
+	    } else if (!memcmp(str, ".eh_", 4)) {
+		append(line, "U ");
+		break;
 	    }
 	}
-	append(line, "P ");
+	append(line, "B ");
 	break;
 
       case SHT_NOTE:		append(line, "N ");	break;
       case SHT_STRTAB:		append(line, "$ ");	break;
       case SHT_SYMTAB:		append(line, "S ");	break;
-      case SHT_DYNSYM:		append(line, "D ");	break;
-      case SHT_DYNAMIC:		append(line, "L ");	break;
+      case SHT_DYNSYM:		append(line, "S ");	break;
+      case SHT_DYNAMIC:		append(line, "D ");	break;
       case SHT_REL:		append(line, "R ");	break;
-      case SHT_RELA:		append(line, "A ");	break;
+      case SHT_RELA:		append(line, "R ");	break;
       case SHT_HASH:		append(line, "H ");	break;
+      case SHT_GROUP:		append(line, "g ");	break;
       case SHT_NOBITS:		append(line, "0 ");	break;
-#ifdef SHT_GNU_verdef
-      case SHT_GNU_verdef:	append(line, "U ");	break;
-#endif
-#ifdef SHT_GNU_verneed
+      case SHT_GNU_HASH:	append(line, "H ");	break;
+      case SHT_GNU_verdef:	append(line, "V ");	break;
       case SHT_GNU_verneed:	append(line, "V ");	break;
-#endif
-#ifdef SHT_GNU_versym
-      case SHT_GNU_versym:	append(line, "W ");	break;
-#endif
+      case SHT_GNU_versym:	append(line, "V ");	break;
       default:			append(line, "? ");	break;
     }
 
@@ -732,9 +794,9 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
 		 (shdr->sh_flags & SHF_WRITE ? 'w' : '-'),
 		 (shdr->sh_flags & SHF_EXECINSTR ? 'x' : '-'));
     if (dooffs)
-	append(line, "%6lX", shdr->sh_offset);
-    append(line, "%6lX %s", shdr->sh_size,
-			    sectstr ? sectstr + shdr->sh_name : "(n/a)");
+	append(line, offsetfmt, shdr->sh_offset);
+    append(line, sizefmt, shdr->sh_size);
+    append(line, " %s", sectstr ? sectstr + shdr->sh_name : "(n/a)");
     if (shdr->sh_type == SHT_REL || shdr->sh_type == SHT_RELA)
 	append(line, ":%lu", shdr->sh_info);
     if (shdr->sh_link)
@@ -751,35 +813,51 @@ static void describeshdr(textline *line, Elf32_Shdr *shdr)
  */
 static void readoptions(int argc, char *argv[])
 {
+    static char const *optstring = "cdiPpSw:";
+    static struct option const options[] = {
+	{ "sources", no_argument, NULL, 'c' },
+	{ "dependencies", no_argument, NULL, 'd' },
+	{ "nophdr", no_argument, NULL, 'P' },
+	{ "noshdr", no_argument, NULL, 'S' },
+	{ "nostr", no_argument, NULL, 'i' },
+	{ "nopos", no_argument, NULL, 'p' },
+	{ "width", required_argument, NULL, 'w' },
+	{ "help", no_argument, NULL, 'H' },
+	{ "version", no_argument, NULL, 'V' },
+	{ 0, 0, 0, 0 }
+    };
+
     char const *str;
-    int		n;
+    int n;
+
+    programname = argv[0];
+    if (argc == 1) {
+	fputs(yowzitch, stdout);
+	exit(EXIT_SUCCESS);
+    }
 
     if (!(str = getenv("COLUMNS")) || (outwidth = atoi(str)) <= 0)
 	outwidth = 80;
 
-    while ((n = getopt(argc, argv, "cdEhiPpSvw:")) != EOF) {
+    while ((n = getopt_long(argc, argv, optstring, options, NULL)) != EOF) {
 	switch (n) {
-	  case 'h':	fputs(yowzitch, stdout);	exit(EXIT_SUCCESS);
-	  case 'v':	fputs(vourzhon, stdout);	exit(EXIT_SUCCESS);
-	  case 'E':	skipID = TRUE;			break;
 	  case 'c':	srcfls = TRUE;			break;
 	  case 'd':	ldepls = TRUE;			break;
 	  case 'P':	phdrls = FALSE;			break;
 	  case 'S':	shdrls = FALSE;			break;
 	  case 'i':	dostrs = FALSE;			break;
 	  case 'p':	dooffs = FALSE;			break;
-
-	  case 'w':
-	    if ((outwidth = atoi(optarg)) < 0) {
-		fputs(yowzitch, stderr);
-		exit(EXIT_FAILURE);
-	    }
-	    break;
-
+	  case 'w':	outwidth = atoi(optarg);	break;
+	  case 'H':	fputs(yowzitch, stdout);	exit(EXIT_SUCCESS);
+	  case 'V':	fputs(vourzhon, stdout);	exit(EXIT_SUCCESS);
 	  default:
-	    fputs(yowzitch, stderr);
+	    fprintf(stderr, "Try --help for more information.\n");
 	    exit(EXIT_FAILURE);
 	}
+    }
+    if (outwidth < 0) {
+	err("invalid width parameter.");
+	exit(EXIT_FAILURE);
     }
 }
 
@@ -787,13 +865,16 @@ static void readoptions(int argc, char *argv[])
  */
 int main(int argc, char *argv[])
 {
-    textline   *lines;
+    textline   *lines = NULL;
     char      **arg;
     int		ret = 0;
     int		count, i;
 
-    thisprog = argv[0];
     readoptions(argc, argv);
+    if (optind == argc) {
+	err("nothing to do.");
+	exit(EXIT_FAILURE);
+    }
 
     for (arg = argv + optind ; (thefilename = *arg) != NULL ; ++arg) {
 	if (!(thefile = fopen(thefilename, "rb"))) {
@@ -822,6 +903,7 @@ int main(int argc, char *argv[])
 	    }
 	}
 
+	makenumberfmts();
 	if (phdrls && proghdrs) {
 	    printf("Program header table entries: %d", elffhdr.e_phnum);
 	    if (dooffs)

@@ -8,66 +8,85 @@ most part, these programs have limited real-world utility. (Although I
 myself have found some of these programs quite useful while writing
 the others.)
 
-Each program is independent. There is no shared code between them, and
-in fact they all take slightly different approaches to handling ELF
-files.
+With the exception of shared use of the elfrw static library, each
+program is independent of the others. There is no other shared code
+between them, and they all take slightly different approaches to
+handling ELF files.
 
 The table of contents:
 
 sstrip/
-  sstrip is a small utility that removes everything from an ELF file
-  that is not part of the file's memory image.
+  sstrip is a small utility that removes as much as possible from an
+  ELF file without affecting the file's memory image.
 
-rebind/
-  rebind is another small utility that alters the binding of selected
-  exported symbols in an ELF object file.
+objres/
+  objres is a simple utility that embeds arbitrary binary data files
+  in object files as exported variables.
 
 elfls/
   elfls is a utility that displays an ELF file's program and/or
   section header tables, which serve as a kind of global roadmap to
   the file's contents.
 
+rebind/
+  rebind is another small utility that alters the binding of selected
+  exported symbols in an ELF object file.
+
+elfrw/
+  libelfrw.a is a small wrapper library. Its main purpose is to make
+  32-bit ELF structures look like 64-bit structures when reading ELF
+  files (and vice versa when writing them), thus allowing programs to
+  more easily support both flavors of ELF files. The previous four
+  programs all make use of this library.
+
 elftoc/
   elftoc takes an ELF file and generates C code that defines a
   structure with the same memory image, using the structures and
-  preprocessor symbols defined in <linux/elf.h>.
+  preprocessor symbols defined in your system's elf.h header file.
 
 ebfc/
   ebfc is a compiler for a tiny programming language. The compiler can
-  generate ELF executables, object files, and shared libraries.
+  generate 32-bit ELF executables, object files, and shared libraries.
 
-tiny/
-  This directory contains a collection of very small ELF executables.
+infect/
+  infect provides a very simple example of modifying an ELF executable
+  without affecting its original program.
 
-See the README in each directory for more details.
+See the README in each directory for more details about each program.
 
-The ELF standard is necessary reading if you wish to fully understand
-how all of the programs work. You can download a copy as a Postscript
-document from ftp://tsx.mit.edu/pub/linux/packages/GCC/ELF.doc.tar.gz.
-Alternately, you can obtain a flat-text transcription of this document
-from http://www.muppetlabs.com/~breadbox/software/ELF.txt.
+The ELF standard is worthwhile reading if you want to understand more
+about the inner workings of these programs. You can find PDF documents
+describing the 32-bit ELF standard, and the additions made for 64-bit
+support, floating around in various unlikely places on the web. Search
+engines are your friends here.
 
-    These programs are Copyright (C) 1999-2001 by Brian Raiter.
+Many years ago I created a flat-text version of the document because
+the Postscript version was too hard to search. You can find it at
+<http://www.muppetlabs.com/~breadbox/software/ELF.txt>. Although it
+only covers 32-bit ELF for x86, nearly all of it is still applicable
+to 64-bit ELF files as well.
 
-    These programs are all free software; you can redistribute and/or
-    modify them under the terms of the GNU General Public License as
-    published by the Free Software Foundation; either version 2 of the
-    License, or (at your option) any later version.
+Earlier versions of this distribution also included my collection of
+tiny ELF executables. I stopped including these because they are
+somewhat orthogonal to the subject of most of the programs here. They
+can be found at <http://www.muppetlabs.com/~breadbox/software/tiny/>
+if you are curious about them.
 
+    These programs are copyright (C) 1999, 2000, 2001, 2011 by Brian
+    Raiter. These programs are free software; you can redistribute
+    them and/or modify them under the terms of the GNU General Public
+    License as published by the Free Software Foundation; either
+    version 2 of the License, or (at your option) any later version.
     These programs are distributed in the hope that they will be
-    interesting, but without any warranty; without even the implied
-    warranty of merchantability or fitness for a particular purpose.
-    See the GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program, in the file COPYING. If not, write to the
-    Free Software Foundation, Inc., 59 Temple Place, Suite 330,
-    Boston, MA 02111-1307 USA.
+    useful, but WITHOUT ANY WARRANTY; without even the implied
+    warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License, included in this distribution
+    in the file COPYING, for more details.
 
 Bug reports and general feedback should be directed to the author at
-breadbox@muppetlabs.com.
+<breadbox@muppetlabs.com>.
 
 Share and enjoy.
 
 Brian Raiter
-breadbox@muppetlabs.com
+<http://www.muppetlabs.com/~breadbox/software/elfkickers.html>

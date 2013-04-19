@@ -7,7 +7,7 @@
 #include	<stdio.h>
 #include	<stdlib.h>
 #include	<errno.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 

@@ -1,27 +1,22 @@
 /* out.h: The top-level output functions.
- *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2011 by Brian Raiter <breadbox@muppetlabs.com>
+ * License GPLv2+: GNU GPL version 2 or later.
+ * This is free software; you are free to change and redistribute it.
+ * There is NO WARRANTY, to the extent permitted by law.
  */
-
 #ifndef	_out_h_
 #define	_out_h_
 
-#include	"pieces.h"
-
-/* Begins the output of the C code. Outputs the initial definitions
- * and the beginning of the initialization statement.
+/* Outputs one piece of the ELF file, located at the given offset and
+ * size, and represented as the indicated type. ndx is the piece's
+ * index value, which can be used to access data associated with the
+ * piece.
  */
-extern void beginoutpieces(void);
+extern void outtypedblock(int type, long offset, long size, int ndx);
 
-/* Outputs the initialization code for a piece of the file, given the
- * actual contents of that piece.
+/* Runs the entire process of outputting the ELF file image as C
+ * source code. Call this function at the end of the program.
  */
-extern void outpiece(pieceinfo const *piece, void const *contents);
-
-/* Concludes the output of the C code. Closes the initialization 
- * statement.
- */
-extern void endoutpieces(void);
+extern void output(void);
 
 #endif

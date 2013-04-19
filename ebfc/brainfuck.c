@@ -8,7 +8,7 @@
 #include	<stdlib.h>
 #include	<string.h>
 #include	<stddef.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"ebfc.h"
 

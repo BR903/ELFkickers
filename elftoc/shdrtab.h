@@ -1,38 +1,24 @@
-/* shdrtab.h: Functions for handling the section header table entries.
- *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+/* shdrtab.h: Reading the section header table.
+ * Copyright (C) 1999,2011 by Brian Raiter <breadbox@muppetlabs.com>
+ * License GPLv2+: GNU GPL version 2 or later.
+ * This is free software; you are free to change and redistribute it.
+ * There is NO WARRANTY, to the extent permitted by law.
  */
+#ifndef _shdrtab_h_
+#define _shdrtab_h_
 
-#ifndef	_shdrtab_h_
-#define	_shdrtab_h_
-
-#include	"elf.h"
-
-/* Initializes the section header table (this function must be called
- * before any of the others in this module), and assigns each section
- * a name (for the C enum).
+/* Uses the section header table to break the ELF file up into pieces,
+ * with the section header string table supplying the piece names.
  */
-extern int enumsections(Elf32_Ehdr const *ehdr, Elf32_Shdr const *shdrs,
-			char const *shstrtab);
+extern void dividesections(long offset, int count, int entsize, int shstrndx);
 
-/* Returns the section header table entry for a given index.
+/* Returns the identifier name for a given section index. If no such
+ * name exists, a decimal literal is returned instead.
  */
-extern Elf32_Shdr const *getshdr(int shndx);
+extern char const *getsectionid(int ndx);
 
-/* Returns the enum name of a section for a given index.
+/* Outputs the list of section names as an enum definition.
  */
-extern char const *getshdrname(int shndx);
-
-/* Returns the actual name (as stored in the section header string
- * table) of a section for a given index, or NULL if no such name
- * exists.
- */
-extern char const *getshdrtruename(int shndx);
-
-/* Outputs the enumeration of the sections. Returns FALSE if no such
- * enumeration can be output.
- */
-extern int outshdrnames(void);
+extern void outputenum(void);
 
 #endif

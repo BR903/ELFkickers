@@ -1,8 +1,51 @@
+* May 2011: version 3.0
+
+	After a decade hiatus, I finally took the plunge and updated this
+	package. With some effort I've managed to get a new version out in
+	time for the ten-year anniversary of the last update.
+
+	The most important change: All the programs (except ebfc) have
+	been updated to deal equally well with 32-bit and 64-bit ELF
+	files. This has been a long time coming (though it had to wait
+	until I had a 64-bit machine of my own to test on).
+
+	A very simple library, elfrw, has been added which hides many of
+	the differences between 32-bit and 64-bit ELF files, allowing the
+	smaller programs to support both types of files without
+	significant code changes.
+
+	The program objres has been added to the collection.
+
+	The sample program infect has been added to the collection.
+
+	All of the old programs have been cleaned up to avoid the new gcc
+	warnings, use getopt_long, and in general brought more in line
+	with my current programming style.
+
+	elftoc in particular has had several sections rewritten. The most
+	important change is that the build process reads the local copy of
+	elf.h to find out which ELF macros are available on the current
+	installation, instead of relying on a hard-coded list included in
+	the distribution. elftoc also required lots of nearly-duplicate
+	code in order to support both 32-bit and 64-bit ELF files.
+
+	Man pages have been added for the utilities that didn't have them,
+	for the sake of consistency if nothing else.
+
+	The tiny programs have been removed from ELF kickers. Not because
+	I don't love them any less, but they tend to suffer more quickly
+	than the rest of the code from changes to Linux. In the last ten
+	years I've had to modify nearly all of them at least once to keep
+	them working with current kernels.
+
+	(ebfc is the only utility that has not been updated for 64-bit. I
+	intend to remedy this in the near future.)
+	
 * May 2001: version 2.0a
 
 	Two small bug fixes, reported to me by people who downloaded
-	version 2.0.
-
+	version 2.0, the details of which are lost to history.
+	
 * April 2001: version 2.0
 
 	I began spelunking in the system header files <elf.h> and

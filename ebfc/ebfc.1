@@ -1,4 +1,4 @@
-.TH EBFC 1 "July 1999"
+.TH EBFC 1 "July 1999" "ELF kickers 2.0"
 .LO 1
 .SH NAME
 ebfc \- ELF Brainfuck compiler
@@ -7,8 +7,8 @@ ebfc \- ELF Brainfuck compiler
 [\-lxcszhv] [\-f FUNCTION] [\-o FILE] [\-i FILE] SRCFILE
 .SH DESCRIPTION
 .B ebfc
-is a compiler for the Brainfuck programming language, creating ELF
-files targeted for the Linux platform running under an Intel x86
+is a compiler for the Brainfuck programming language, creating 32-bit
+ELF files targeted for the Linux platform running under an Intel x86
 architecture.
 .P
 .B ebfc
@@ -58,19 +58,19 @@ the name of the target file will be
 instead.)
 .SH OTHER OPTIONS
 .TP
-.BI \-f " FUNCTION"
+\fB\-f\fR \fIFUNCTION\fR
 Use
 .I FUNCTION
 as the name of the function to contain the compiled program. (This
 option is not generally useful when the final target is a standalone
 executable.)
 .TP
-.BI \-o " FILE"
+\fB\-o\fR \fIFILE\fR
 Use
 .I FILE
 as the target filename.
 .TP
-.BI \-i " FILE"
+\fB\-i\fR \fIFILE\fR
 Use
 .I FILE
 as the name of the source file to place in the target file. This
@@ -233,6 +233,10 @@ level of nested brackets exceeds the compiler's maximum capacity
 .P
 The program's behavior is subsequently undefined if the pointer is
 moved outside of the 30000-byte array.
-.SH AUTHOR
-Brian Raiter
+.SH COPYRIGHT
+Copyright \(co 1999 Brian Raiter
 .IR <breadbox@muppetlabs.com> .
+.P
+License GPLv2+: GNU GPL version 2 or later. This is free software: you
+are free to change and redistribute it. There is NO WARRANTY, to the
+extent permitted by law.

@@ -5,7 +5,7 @@
  */
 
 #include	<stdlib.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 
@@ -26,7 +26,7 @@ static void new(elfpart *part)
  */
 static void init(elfpart *part, blueprint const *bp)
 {
-    ((Elf32_Ehdr*)bp->parts[0].part)->e_phoff = (Elf32_Off)part;
+    ((Elf32_Ehdr*)bp->parts[0].part)->e_phoff = (Elf32_Off)(long)part;
 
     part->done = TRUE;
     (void)bp;
@@ -65,7 +65,7 @@ static void fill(elfpart *part, blueprint const *bp)
 	phdr[PH_DYNAMIC].p_type = PT_DYNAMIC;
 	phdr[PH_DYNAMIC].p_flags = PF_R | PF_W;
 	phdr[PH_DYNAMIC].p_align = 4;
-	phdr[PH_DYNAMIC].p_offset = (Elf32_Off)(bp->parts + n);
+	phdr[PH_DYNAMIC].p_offset = (Elf32_Off)(long)(bp->parts + n);
     }
 
     part->done = TRUE;
@@ -97,7 +97,7 @@ static void complete(elfpart *part, blueprint const *bp)
     phdr[PH_DATA].p_memsz -= phdr[PH_DATA].p_offset;
 
     if (part->count > PH_DYNAMIC) {
-	p = (elfpart*)phdr[PH_DYNAMIC].p_offset;
+	p = (elfpart*)(long)phdr[PH_DYNAMIC].p_offset;
 	phdr[PH_DYNAMIC].p_offset = p->offset;
 	phdr[PH_DYNAMIC].p_vaddr = p->addr;
 	phdr[PH_DYNAMIC].p_memsz = p->size;

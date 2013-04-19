@@ -1,17 +1,18 @@
 ebfc is a compiler for a tiny programming language called Brainfuck.
 (If the name of the language offends you, then you might as well stop
 reading now and just delete this entire subdirectory.) This language
-was created by Urban Mueller, apparently solely for the purpose of
+was created by Urban Müller, apparently solely for the purpose of
 being able to create a compiler for the Amiga under 256 bytes in size.
-(My own efforts along these lines can be found in the tiny/
-subdirectory, by the way.) I chose to write a compiler for this
+(My own efforts along these lines can be found at my website of tiny
+ELF executables, by the way.) I chose to write a compiler for this
 language so as to keep the details of the language translation to a
 minimum, and focus on the process of building an ELF file completely
 from scratch.
 
 ebfc can compile Brainfuck programs into executables, shared
-libraries, and/or object files. Refer to the manpage for a description
-of the command-line options and of the Brainfuck language itself.
+libraries, and/or object files. Refer to the man page for a
+description of the command-line options and of the Brainfuck language
+itself.
 
 Most of the code that deals with creating the ELF file is built into a
 separate library, called elfparts. This library is too primitive to be
@@ -40,5 +41,5 @@ on how the function is being invoked (i.e., from the OS, another
 program, or another part of the same program).
 
 The ebfc/bf/ subdirectory contains a few Brainfuck programs, which can
-be used to test the compiler. prime.b was written by Urban Mueller;
+be used to test the compiler. prime.b was written by Urban Müller;
 the others were written by myself.

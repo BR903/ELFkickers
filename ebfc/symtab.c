@@ -6,7 +6,7 @@
 
 #include	<stdlib.h>
 #include	<string.h>
-#include	<linux/elf.h>
+#include	<elf.h>
 #include	"elfparts.h"
 #include	"gen.h"
 

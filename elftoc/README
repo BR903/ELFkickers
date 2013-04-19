@@ -1,55 +1,47 @@
 elftoc reads an ELF file and outputs the file as C code. That is, the
 program generates the C source for an initialization of a structure
-that should have the same memory image as the original ELF file.
+that has the same memory image as the original ELF file.
 
 The various parts of the file are mapped to fields of a structure
 which is defined at the top of the output. The contents of the program
 proper, namely the text and data segments, translate into mere arrays
 of bytes (elftoc is not a disassembler), but the ELF-specific
 structures are decoded as much as possible. The program tries to
-replace hardcoded numbers with preprocessor symbols and compile-time
+replace hard-coded numbers with preprocessor symbols and compile-time
 calculations based on sizeof and offsetof(). Section indices and
 memory addresses are identified and given symbolic names.
 
-If the program is successful, one should be able to append the
-following to the output:
+In other words, one can take the output from elftoc and append the
+following lines:
 
-  #include <unistd.h>
-  int main(void) { return write(1, &foo, sizeof foo); }
+  int main(void) { return fwrite(&foo, 1, sizeof foo, stdout); }
 
 to produce a valid C program that will output a copy of the original
-file.
+input file.
 
-If the output is not identical to the original, it is typically due to
-problems with structure padding and alignment. The most common cause
-is when the file as a whole is not an even multiple of 4 bytes in
-size. The C structure, using gcc with the 32-bit Intel architecture,
-will have one to three bytes of padding at the end to align its size.
-In this situation, elftoc inserts an extra field, called _end, to make
-this padding explicitly visible. Thus one could append the following
-code instead:
+As part of the build process, elftoc reads the local copy of
+/usr/include/elf.h and builds a table of the available macro names.
+This step depends on the -dM option provided by gcc's preprocessor,
+which outputs a list of defined macros.
 
-  #include <unistd.h>
-  int main(void) { return write(1, &foo, offsetof(elf, _out)); }
+While the form of a C struct usually works well to capture the
+internal organization of an ELF file, there can be issues with padding
+and alignment. If the overall file size is not an even multiple of 8
+bytes (or 4 bytes, for a 32-bit ELF file), the C struct will typically
+have one to seven bytes of padding at the end to align its size. In
+this situation elftoc will insert an extra field, called _end, to make
+this padding explicitly visible. So in this situation one might
+instead append the following code:
 
-and still get an exact replica (although the presence of padding at
-the end of a file should not cause an ELF file to work any differently
-than before).
+  int main(void) { return fwrite(&foo, 1, offsetof(elf, _end), stdout); }
 
-A more problematic situation is when a field that is itself an array
-of structures is not aligned on a 4-byte boundary. The various
-substructures of an ELF file are supposed to be aligned within the
-file. But if any such structures aren't, then the C code will not be
-an exact replica of the original file, and the output of such code may
-or may not operate correctly. elftoc will issue a warning in this
-situation. (The program could still produce valid output in this case
-by representing the misaligned section in the structure as a simple
-byte array. However, the whole purpose of elftoc is to expose the ELF
-structures within it, so it seems better to proceed and hope for the
-best.)
+in order to still get an exact replica. Note, though, that the
+presence of extra padding at the end of a file won't change a
+program's behavior (unless it's doing some arcane sort of
+self-examination).
 
-elftoc will also issue warnings if the file appears to be corrupt, or
-appears to be created for a completely different architecture.
-However, unless the file lacks the ELF magic-number signature, or
-contains seriously pathological information, elftoc will always
+elftoc will also emit warnings if fields are misaligned for their
+type, or if the file appears to be corrupt in a few other ways.
+However, barring one or two special cases (such as trying to parse a
+big-endian file on a little-endian machine), elftoc will always
 attempt to produce valid output.
