@@ -1,0 +1,163 @@
+.TH EBFC 1 "July 1999"
+.LO 1
+.SH NAME
+ebfc \- ELF Brainfuck compiler
+.SH SYNOPSIS
+.B ebfc
+[\-lxcshv] [\-f FUNCTION] [\-o FILE] [\-i FILE] SRCFILE
+.SH DESCRIPTION
+.B ebfc
+is a compiler for the Brainfuck programming language, creating ELF
+files targeted for the Linux platform running under an Intel x86
+architecture.
+.P
+.B ebfc
+can create standalone executables, shared libraries, or object files,
+and the object file can itself be targeted for a standalone executable
+or a shared library, as well as a simple module.
+.SH COMPILATION OPTIONS
+The following options control how the source file is compiled. It is
+assumed here that the name of the source file is
+.BR foo.b .
+.TP
+.BI \-x
+Compile the source code into a standalone executable file, named
+.BR foo .
+.TP
+.BI \-l
+Compile the source code into a function, named
+.BR foo (),
+in a shared library file, named
+.BR libfoo.so .
+.TP
+.BI \-c
+Compile the source code into a function, named
+.BR foo (),
+in an object file, named
+.BR foo.o .
+.TP
+.BI \-xc
+Compile the source code into an object file, named
+.BR foo.o ,
+that can then be linked into a standalone executable.
+.TP
+.BI \-lc
+Compile the source code into a function, named
+.BR foo (),
+in an object file, named
+.BR foo.o ,
+that can then be linked into a shared library.
+.P
+If the source filename lacks a
+.B .b
+suffix, then the entire filename will be used when creating the name
+of the target file and function. (In the case of
+.IR -x ,
+the name of the target file will be
+.B a.out
+instead.)
+.SH OTHER OPTIONS
+.TP
+.BI \-f " FUNCTION"
+Use
+.I FUNCTION
+as the name of the function to contain the compiled program. (This
+option is not generally useful when the final target is a standalone
+executable.)
+.TP
+.BI \-o " FILE"
+Use
+.I FILE
+as the target filename.
+.TP
+.BI \-i " FILE"
+Use
+.I FILE
+as the name of the source file to place in the target file. This
+option is only meaningful if the target is an object file, and if the
+.I \-s
+option is not used.
+.TP
+.BI \-s
+Suppress inclusion of unnecessary data in the target file. By default,
+.B ebfc
+includes a .comment section in object and library files, and includes
+the source filename in the .symtab section. These items will be
+removed from the output when this option is used.
+.TP
+.BI \-h
+Display help and exit.
+.TP
+.BI \-v
+Display version number and exit.
+.SH LINKING
+When calling a compiled Brainfuck program from within a C program, the
+C prototype for the Brainfuck function should have the form:
+.P
+    extern void foo(void);
+.SH THE BRAINFUCK PROGRAMMING LANGUAGE
+A Brainfuck program has an implicit byte pointer, called "the pointer",
+which is free to move around within an array of 30000 bytes, initially
+all set to zero. The pointer itself is initialized to point to the
+beginning of this array.
+.P
+The Brainfuck programming language consists of eight commands, each of
+which is represented as a single character.
+.TP
+.BI >
+Increment the pointer.
+.TP
+.BI <
+Decrement the pointer.
+.TP
+.BI +
+Increment the byte at the pointer.
+.TP
+.BI \-
+Decrement the byte at the pointer.
+.TP
+.BI .
+Output the byte at the pointer.
+.TP
+.BI ,
+Input a byte and store it in the byte at the pointer.
+.TP
+.BI [
+Jump to the matching
+.I ]
+if the byte at the pointer is zero.
+.TP
+.BI ]
+Jump to the matching
+.IR [ .
+.P
+Any other characters in the source code are treated as comments or
+whitespace, and ignored.
+.P
+The semantics of the Brainfuck commands can also be succinctly
+expressed in terms of C, as follows (assuming that
+.I p
+has been previously defined as a
+.IR char* ):
+.P
+\"
+    >  becomes  ++p;
+    <  becomes  --p;
+    +  becomes  ++*p;
+    -  becomes  --*p;
+    .  becomes  putchar(*p);
+    ,  becomes  *p = getchar();
+    [  becomes  while (*p) {
+    ]  becomes  }
+\"
+.SH ERRORS
+The compiler will issue an error message, and the compilation will
+fail, if the program contains unbalanced bracket commands, or if the
+level of nested brackets exceeds the compiler's maximum capacity
+(which is arbitrarily set at 256).
+.P
+The program's behavior is subsequently undefined if the pointer is
+moved outside of the 30000-byte array.
+.SH AUTHOR
+Brian Raiter
+.IR <breadbox@muppetlabs.com> .

@@ -1,0 +1,192 @@
+The programs within this directory are provided as exhibitions of just
+how compressed a Linux ELF executable can be and still function.
+
+Take a look through /usr/bin: how big is the smallest ELF executable
+in there? Now try writing the smallest hello-world program you can.
+Can you get it under 1K? Can you get it under 100 bytes?
+
+This is precisely what I set out to do one day, and I ended up with a
+minor obsession over creating the smallest possible executables.
+
+Your average ELF executable, even after being stripped, contains a
+fair bit of overhead, some of it completely superfluous. And when you
+rip out everything that doesn't contribute to a program's memory
+image, much of what remains, beside the program code itself, is
+information needed by the dynamic linker. This is of course very
+important information to have -- but if the program makes its own
+system calls, it can dispense with that overhead as well.
+
+Of course, there are few tools out there that will create an
+executable that has none of this extra machinery. But if one is
+willing to define the file entirely by hand, an executable can be
+created with the absolute minimum contents, including only the
+information that Linux needs in order to get it into memory and start
+it running.
+
+The minimum information an ELF executable file needs to have is: an
+ELF header, and a program header table with at least one entry. (See
+the ELF standard for more information about these entities.) But, even
+in these two remaining structures, there are fields that aren't used,
+particularly with such a bare-bones executable. Furthermore, there are
+other fields in these structures which do serve a purpose, but which
+are not, at this point in time, actually examined by the Linux OS. So,
+these fields can be used, if the programmer is desperate enough, to
+hold other bits of data, or even small amounts of code....
+
+Let me pause for a moment and make this perfectly clear: I
+emphatically do NOT advocate the wilfull, widespread disregard of
+standards. Certainly, just because the ELF standard says that a given
+field will hold a certain value does not automatically mean that Linux
+ought to examine that field and reject any ELF file with something
+else there. But by the same token, just because (the current version
+of) Linux ignores the contents of that field does NOT give programmers
+implicit permission to fill it in with anything they like. When
+programmers en masse adhere to existing implementations instead of
+existing standards is exactly when a well-written standard becomes an
+obstacle instead of a tool, when future standards are forced to
+canonize ludicrous practices in the name of backward-compatibility,
+and when everything generally goes to hell. So: where these programs
+violate requirements of the ELF standard, do not take them seriously.
+These programs have been offered up as entertainment, and perhaps as
+an education in existing practice. But PLEASE do not seek to emulate
+such behavior in other, more serious programming work.
+
+Of course, violating requirements of the ELF standard is only one way
+in which these programs achieve such compression. Much else regarding
+the organization of the ELF structures in these programs is admittedly
+unorthodox, but nonetheless in complete adherence to the standard.
+And most important of all, of course, is the creative reworking of
+algorithms. Finally, as with any CISC assembly programming, there is
+also plenty of uncommon instructions used to accomplish common tasks.
+(This can be an especially fruitful avenue of exploration on the Intel
+x86 as so many of the short instructions date back to the 8086, or
+worse, and are usually considered to be completely obsolescent, as
+Intel has made no attempt to keep their timings abreast of the rest of
+the instruction set. These days, one usually programs in assembly only
+in order to optimize the running time, in which case it is very
+important to stick with the core instruction set as much as possible.
+But when optimizing for space instead of speed, one suddenly finds new
+uses for all those obscure one- and two-byte instructions.)
+
+The process of size-optimizing an ELF executable is described in more
+detail in my essay: "A Whirlwind Tutorial on Creating Really Teensy
+ELF Executables for Linux", which can be found at
+http://www.muppetlabs.com/~breadbox/software/tiny/teensy.html.
+
+For each program, the assembly source code is included along with the
+binary. If you wish to actually build the programs, you will need to
+have a copy of Nasm. (Nasm is an excellent free assembler for the
+Intel x86. Its home page is at http://www.cryogen.com/Nasm/.)
+
+The table of contents:
+
+* true/false (true.asm)
+
+The source code defines a program that returns an exit code of either
+zero or one, depending on whether it is invoked with the name "true"
+or "false", respectively.
+
+This one is the runt of the litter: 45 bytes in size. I believe that
+this is the smallest it is possible for a Linux ELF executable to
+be. (After all, a complete ELF header alone is 52 bytes long.)
+
+* hello
+
+The final version of the program that started me off on this whole
+pursuit: hello world. It is 59 bytes long.
+
+This may well be the densest one here. With the program header table
+overlaid on top of the ELF header, and program itself running through
+both of them, some of the bytes have no less than three completely
+different purposes.
+
+* fgconsole
+
+fgconsole is the smallest ELF executable in my /usr/bin directory
+(2640 bytes), so I decided to see how small my own version could be. I
+managed to fit it into 68 bytes.
+
+fgconsole simply prints the number of the currently active virtual
+console. If run from somewhere other than the console, it returns a
+non-zero exit code.
+
+* bf
+
+As explained in the README for ebfc, Brainfuck is a very simplistic
+programming language, which was invented by Urban Mueller solely for
+the purpose of being able to create a compiler that was less than 256
+bytes in size, for the Amiga OS. (His program was 240 bytes long,
+before he apparently lost it in a disk crash.) I eventually decided to
+take up the challenge as well, and create a Brainfuck compiler for
+Linux using less than 256 bytes.
+
+The manpage for ebfc includes a short but complete description of the
+language, and some actual Brainfuck programs can be found under
+./ebfc/bf. The compiler works as a filter: redirect the source code to
+the compiler's input and the compiler's output to a file. (And don't
+forget to chmod +x the file.)
+
+At the beginning I didn't expect that I would actually succeed, since
+I thought I would need almost half of that just for the headers. I
+think my first cut was 458 bytes in size. I was quite pleased with
+myself when I trimmed that down to less than 300 bytes, ecstatic when
+I finally reached the 255-byte goal, and downright triumphant when I
+later got it to work in 238 bytes. By the time I had a 198-byte
+version, I was just plain dumbfounded. It's now at 172 bytes. And
+though I can't quite believe it, it works just as well as the first
+one did. As useless as it is, I think this one would have to be the
+crown jewel of this little collection. It is quite possibly also the
+ugliest program I have ever written.
+
+* hexdump
+
+This is your classic hexdump program. I wrote it one day in a fit of
+pique, after trying (and failing) to convince the standard Linux
+hexdump program to use the canonical hexdump formatting style. This
+program works strictly as a filter.
+
+At 192 bytes, hexdump is a relatively large program. Part of the
+reason it's so big is that I set myself the added constraint of
+adhering strictly to the ELF standard. (Because this program is
+actually sort of useful to me, I decided I didn't want it to stop
+working if Linux suddenly tightened up its ELF standard conformance
+requirements.)
+
+* cat
+
+Writing hexdump gave me the idea of writing other basic UNIX utilities
+as tiny programs. I doubt I'll actually try to recreate sh-utils, but
+for now, here's cat, weighing in at 128 bytes.
+
+Like hexdump, this program's size suffers from being strictly faithful
+to the requirements of the ELF standard. The program proper accounts
+for less than half of the file's contents. In its favor, however, it
+is the only program in this collection that returns actual error codes
+(as opposed to arbitrary non-zero values) when a file can't be read.
+
+* factor
+
+This is an implementation of the standard Unix program. It displays
+the prime factors of the integers specified on the command line, or on
+standard input if no arguments are given.
+
+This program is the oddity of this collection. Instead of simply
+trying to achieve the smallest possible size, I decided to attempt to
+achieve proper portability. This program not only conforms to the
+requirements of the ELF standard, it is also the only program in this
+collection that actually uses functions from libc (as opposed to
+making its own system calls). Thus it should continue to work with any
+future version of Linux, as long as new versions of libc and the ELF
+standard remain backwards-compatible.
+
+In addition, I decided to try to balance optimizing for both size and
+speed. This program is significantly faster than the GNU
+implementation of factor for Linux. Of course, factor normally runs
+almost instantaneously, so to make that extra speed useful, I
+increased the maximum input value from 2^32 - 1 to 10^18 - 1 (or
+nearly 2^60).
+
+Finally, I added online help and an appropriate error message for
+invalid input. The resulting program therefore could arguably serve as
+a fully functional replacement for the existing standard utility. Its
+size is exactly 1000 bytes -- still less than single block.

@@ -1,0 +1,51 @@
+elftoc reads an ELF file and outputs the file as C code. That is, the
+program generates the C source for an initialization of a structure
+that should have the same memory image as the original ELF file.
+
+The various parts of the file are mapped to fields of a structure
+which is defined at the top of the output. The contents of the program
+proper, namely the text and data segments, translate into mere arrays
+of bytes (elftoc is not a disassembler), but the ELF-specific
+structures are decoded as much as possible. The program tries to
+replace hardcoded numbers with preprocessor symbols and compile-time
+calculations based on sizeof and offsetof(). Section indices and
+memory addresses are identified and given symbolic names.
+
+If the program is successful, one should be able to append the
+following to the output:
+
+  #include <unistd.h>
+  int main(void) { return write(1, &foo, sizeof foo); }
+
+to produce a valid C program that will output a copy of the original
+file.
+
+If the output is not identical to the original, it is typically due to
+problems with structure padding and alignment. The most common cause
+is when the file as a whole is not an even multiple of 4 bytes in
+size. The C structure, using gcc with the 32-bit Intel architecture,
+will have one to three bytes of padding at the end to align its size.
+In this situation, elftoc inserts an extra field, called _end, to make
+this padding explicitly visible. Thus one could append the following
+code instead:
+
+  #include <unistd.h>
+  int main(void) { return write(1, &foo, offsetof(elf, _out)); }
+
+and still get an exact replica. However, the presence of padding at
+the end of a file should never cause an ELF file to work any
+differently than before.
+
+A more problematic situation is when a field that is itself an array
+of structures is not aligned on a 4-byte boundary. The various
+substructures of an ELF file are supposed to be aligned within the
+file. But if any such structures aren't, then the C code will not be
+an exact replica of the original file, and the output of such code may
+or may not operate correctly. elftoc will issue a warning in this
+situation.
+
+elftoc will also issue warnings if the file appears to be corrupt, or
+appears to be created for a completely different architecture.
+However, unless the file lacks the ELF magic-number signature, or
+contains seriously pathological information, elftoc will always
+attempt to produce valid output.

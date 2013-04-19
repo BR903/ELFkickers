@@ -1,0 +1,267 @@
+.TH ELFLS 1 "July 1999"
+.LO 1
+.SH NAME
+elfls \- display the contents of an ELF file
+.SH SYNOPSIS
+.B elfls
+[\-hvPScdEip] [\-w N] FILE...
+.SH DESCRIPTION
+.B elfls
+examines an ELF file, reads the program header table and the section
+header table, and displays a synopsis of the contents.
+.SH OPTIONS
+.TP
+.BI \-h
+Display help and exit.
+.TP
+.BI \-v
+Display version number and exit.
+.TP
+.BI \-P
+Suppress the listing of the program header table.
+.TP
+.BI \-S
+Suppress the listing of the section header table.
+.TP
+.BI \-c
+Include the listing of the source files.
+.TP
+.BI \-d
+Include the listing of the program's dependencies.
+.TP
+.BI \-E
+Don't examines the contents of the ELF identifier. By default
+.B elfls
+verifies that a version 1 ELF identifier is present, and indicates a
+32-bit ELF file of the proper endianness. Use of this option skips
+this verification.
+.TP
+.BI \-i
+Don't treat small entries specially. By default, program and section
+header entries whose referenced contents are mainly or entirely short,
+null-terminated strings are listed by simply displaying the string
+(namely
+.IR interpreter ,
+.IR comment ,
+and
+.I note
+sections). Use of this option
+causes such entries to be displayed the same as other entries.
+.TP
+.BI \-p
+Suppress display of positions of entries within the file.
+.TP
+.BI \-w " N"
+Set the maximum width of the lines of the output to
+.IR N .
+.I N
+can be zero to indicate no maximum width.
+.SH PROGRAM OUTPUT
+The output of the program, for each ELF file given on the command
+line, is as follows:
+.P
+.I file name
+.br
+.I dependencies
+.br
+.I source files
+.br
+.I program header table
+.br
+.I section header table
+.P
+The first line of the output shows the name of the file, and the
+architecture it was created for. The file name will be suffixed with
+an asterisk
+.I *
+if the file is a binary executable, or an ampersand
+.I &
+if the file is a shared library. Otherwise, the file is an object
+file. (This is the only line that is guaranteed to be output. The
+other information is not shown if the data is not applicable, not
+present in the file, or suppressed via the command-line options.)
+.P
+After the file name is shown the list of shared-object libraries with
+which the file is dynamically linked, if any.
+.P
+Next is shown the list of the source files which were used to build
+the file, presuming this information is available.
+.P
+The list of entries in the program header table appears next. See
+below for a detailed description of the output. Binary executables and
+shared libraries always contain a program header table.
+.P
+Finally, the entries in the section header table are displayed. See
+below for a detailed description of the output. ELF files almost
+always contain a section header table, although they are only
+required for object files.
+.SH PROGRAM HEADER TABLE
+The entries in the program header table are displayed in following
+format:
+.P
+.B "    ind T rwx    pos  size address"
+.TP
+.BI ind
+The index number of the entry in the program header table.
+.TP
+.BI T
+A letter indicating the entry's type. The possible types are:
+.TP
+\ \ P
+Program data: machine language instructions or data used by the
+program proper.
+.TP
+\ \ T
+The program header table.
+.TP
+\ \ L
+The dynamic linking information section.
+.TP
+\ \ I
+The interpreter specification. Typically, this will be the pathname of
+the dynamic linker.
+.TP
+\ \ N
+The note section, which typically includes the name and version number
+of the program that created the file.
+.TP
+.BI rwx
+Flags indicating memory permissions for the contents of this entry.
+.I r
+indicates that the contents are to be loaded into readable memory,
+.I w
+indicates that the memory is to be writeable, and
+.I x
+indicates that the memory is to be executable. An
+.I s
+can also appear in the final position, which additionally indicates
+that this section contains the program's starting point.
+.TP
+.BI pos
+A hexadecimal number indicating the position within the file of this
+entry's contents.
+.TP
+.BI size
+A hexadecimal number indicating the size of the entry's contents.
+.TP
+.BI address
+A hexadecimal number indicating the (virtual) memory address at which
+to load this entry's contents.
+.P
+A hexadecimal number at the end of the entry prefixed with a
+.I +
+indicates by how much the size of this entry should be larger in
+memory than it is in the file (with the extra bytes at the end to be
+initialized to zeroes).
+.P
+Note that, unless the
+.I \-i
+switch is used, interpreter and note entries in the program header
+table are simply displayed as a string indicating their contents.
+.SH SECTION HEADER TABLE
+The entries in the section header table are displayed in the following
+format:
+.P
+.B "    ind T rwx    pos  size name"
+.TP
+.BI ind
+The index number of the entry in the section header table.
+.TP
+.BI T
+A letter indicating the entry's type. The possible types are:
+.TP
+\ \ P
+Program data: machine language instructions or data that are part of
+the program proper.
+.TP
+\ \ U
+Uninitialized program data: memory is to be allocated as usual for
+this entry, but not initialized. The size of the entry indicates how
+much memory to allocate, but the file contains no actual data for this
+entry.
+.TP
+\ \ S
+A table of the symbols used in the file.
+.TP
+\ \ D
+A symbol table, the contents of which are typically symbols
+specifically needed for dynamic linking.
+.TP
+\ \ $
+A string table.
+.TP
+\ \ H
+The hash table of symbols used for dynamic linking.
+.TP
+\ \ L
+The dynamic linking information section.
+.TP
+\ \ I
+The interpreter specification. Typically, this will be the pathname of
+the dynamic linker.
+.TP
+\ \ R
+A list of relocation entries.
+.TP
+\ \ A
+A list of relocation entries with explicit addends.
+.TP
+\ \ N
+The note section, which typically includes the name and version number
+of the program that created the file.
+.TP
+\ \ C
+A comment section: unspecified auxiliary information, typically
+inserted by the program that created the file.
+.TP
+.BI rwx
+Flags indicating the memory usage and permission for this entry.
+.I r
+indicates that the contents are to be loaded into memory during
+process execution,
+.I w
+indicates that the contents are to be writeable during process
+execution, and
+.I x
+indicates that the contents contain machine-executable instructions.
+.TP
+.BI pos
+A hexadecimal number indicating the position within the file of this
+entry's contents.
+.TP
+.BI size
+A hexadecimal number indicating the size of the entry's contents.
+.TP
+.BI name
+The name of this section. If the section is a list of relocation
+entries, then the name will be suffixed with a colon and a number, the
+number indicating the index of the section to which the relocation
+information applies. Furthermore, several sections types contain
+information that refer to strings and/or symbols, which are contained
+in a string table section and/or symbol hash table section. Such
+sections will have a number in square brackets after the name,
+indicating the index of this section. An
+.I S
+in square brackets appearing after the name of a string table section
+indicates the string table that contains the section names.
+.P
+Note that, unless the
+.I \-i
+switch is used, interpreter, comment and note entries in the program
+header table are simply displayed as a string indicating their
+contents.
+.SH SEE ALSO
+.IR objdump (1)
+.P
+The Portable Formats Specification for ELF version 1.1, created by the
+TIS (Tool Interface Standards), can currently be found at the
+following locations:
+.TP
+.B ftp://tsx.mit.edu/pub/linux/packages/GCC/ELF.doc.tar.gz
+a compressed archive of the documentation in Postscript format.
+.TP
+.B http://www.muppetlabs.com/~breadbox/software/ELF.txt
+a flat-text transcription of same.
+.SH AUTHOR
+Brian Raiter
+.IR <breadbox@muppetlabs.com> .
