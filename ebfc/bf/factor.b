@@ -1,6 +1,6 @@
 * factor an arbitrarily large positive integer
 *
-* Copyright (C) 1999 by Brian Raiter
+* Copyright (C) 1999-2001 by Brian Raiter
 * under the GNU General Public License
 
 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>-

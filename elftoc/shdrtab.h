@@ -1,7 +1,7 @@
 /* shdrtab.h: Functions for handling the section header table entries.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #ifndef	_shdrtab_h_
@@ -30,8 +30,9 @@ extern char const *getshdrname(int shndx);
  */
 extern char const *getshdrtruename(int shndx);
 
-/* Outputs the enumeration of the sections.
+/* Outputs the enumeration of the sections. Returns FALSE if no such
+ * enumeration can be output.
  */
-extern void outshdrnames(void);
+extern int outshdrnames(void);
 
 #endif

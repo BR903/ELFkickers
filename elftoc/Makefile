@@ -1,7 +1,7 @@
 #  Makefile for elftoc
 
 CC = gcc
-CFLAGS = -ggdb -Wall -W
+CFLAGS = -ggdb -Wall
 LDFLAGS = $(CFLAGS)
 
 elftoc: pieces.o addr.o shdrtab.o outbasic.o outtools.o out.o elftoc.o

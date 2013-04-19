@@ -1,5 +1,9 @@
-;; hello.asm: Copyright (C) 1999 by Brian Raiter, under the GNU
-;; General Public License. No warranty. See COPYING for details.
+;; hello.asm: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
+;; General Public License (version 2 or later). No warranty.
+;;
+;; To build:
+;;	nasm -f bin -o hello hello.asm && chmod +x hello
+
 
 BITS 32
 
@@ -8,7 +12,7 @@ BITS 32
 		dd	1
 		dd	0
 		db	0
-entry:		inc	eax			; the program begins here,
+		inc	eax			; the program begins here,
 		push	eax			;   though these instructions
 		push	dword 0x00030002	;   serve no purpose
 		xor	eax, eax		; zero eax
@@ -32,12 +36,12 @@ msgtext:	db	'hello, world', 10
 ;;		db	1				; 1 = ELFCLASS32
 ;;		db	0				; (garbage)
 ;;		db	0				; (garbage)
-;;		db	0x00, 0x00, 0x00, 0x00		; (unused)
-;;		db	0x00, 0x00, 0x40, 0x50, 0x68
+;;		db	0x00, 0x00, 0x00, 0x00, 0x00	; (unused)
+;;		db	0x00, 0x40, 0x50, 0x68
 ;; e_type:	dw	2				; 2 = ET_EXE
 ;; e_machine:	dw	3				; 3 = EM_386
 ;; e_version:	dd	0x508DC031			; (garbage)
-;; e_entry:	dd	entry				; program starts here
+;; e_entry:	dd	0x6850400D			; program starts here
 ;; e_phoff:	dd	4				; phdrs located here
 ;; e_shoff:	dd	0x50402EB9			; (garbage)
 ;; e_flags:	dd	0xCD589368			; (unused)
@@ -53,10 +57,10 @@ msgtext:	db	'hello, world', 10
 ;;
 ;; p_type:	dd	1				; 1 = PT_LOAD
 ;; p_offset:	dd	0				; read from top of file
-;; p_vaddr:	dd	$$				; load at this address
+;; p_vaddr:	dd	0x68504000			; load at this address
 ;; p_paddr:	dd	0x00030002			; (unused)
 ;; p_filesz:	dd	0x508D30C1			; a tad bit large ...
-;; p_memsz:	dd	entry				; also excessive
+;; p_memsz:	dd	0x6850400D			; also excessive
 ;; p_flags:	dd	4				; 4 = PF_R (no PF_X?)
 ;; p_align:	dd	0x2EB9				; (garbage)
 ;;

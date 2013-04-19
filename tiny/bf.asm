@@ -1,7 +1,10 @@
-;;; bf.asm: a tiny Brainfuck compiler, for Intel Linux.
-;;;
-;;; Copyright (C) 1999 by Brian Raiter, under the terms of the GNU
-;;; General Public License, version 2 or any later version.
+;; bf.asm: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
+;; General Public License (version 2 or later). No warranty.
+;;
+;; To build:
+;;	nasm -f bin -o bf bf.asm && chmod +x bf
+;; To use:
+;;	bf < foo.b > foo && chmod +x foo
 
 BITS 32
 
@@ -67,20 +70,30 @@ branch:		cmp	dh, [ecx]		; ehdr.e_version
 ; The entry point for the compiler (and compiled programs), and the
 ; location of the program header table.
 
-		dd	entrypoint		; ehdr.e_entry
+		dd	_start			; ehdr.e_entry
 		dd	proghdr - $$		; ehdr.e_phoff
 
-; This is the entry point, for both the compiler and its compiled
-; programs. The shared initialization code sets ecx to the beginning
-; of the array that is the compiled programs's data area, and eax,
-; ebx, and ecx to zero, and then continues at initpt2.
+; The last routine of the compiler, called when there is no more
+; input. The epilog code chunk is copied into the code buffer. The
+; text origin is popped off the stack into ecx, and subtracted from
+; edi to determine the size of the compiled program. This value is
+; stored in the program header table, and then is moved into edx.
+; The program then jumps to the putchar routine, which sends the
+; compiled program to stdout before falling through to the epilog
+; routine and exiting.
 
-entrypoint:
-		xor	eax, eax		; ehdr.e_shoff
-		xor	ebx, ebx
-		mov	ecx, DATAORG		; ehdr.e_flags
-		cdq				; ehdr.e_ehsize
-		jmp	short initpt2		; ehdr.e_phentsize
+eof:		movsd				; ehdr.e_shoff
+		xchg	eax, ecx
+		pop	ecx
+		sub	edi, ecx		; ehdr.e_flags
+		xchg	eax, edi
+		stosd
+		xchg	eax, edx
+		jmp	short putchar		; ehdr.e_ehsize
+
+; 0x20 == the size of one program header table entry.
+
+		dw	0x20			; ehdr.e_phentsize
 
 ; The beginning of the program header table. 1 == PT_LOAD, indicating
 ; that the segment is to be loaded into memory.
@@ -110,7 +123,7 @@ bracket:	mov	al, 0xE9
 
 ; This is where the size of the executable file is stored in the
 ; program header table. The compiler updates this value just before it
-; outputs the compiled program. This is the only field in any of the
+; outputs the compiled program. This is the only field in the two
 ; headers that differs between the compiler and its compiled programs.
 ; (While the compiler is reading input, the first byte of this field
 ; is also used as an input buffer.)
@@ -123,29 +136,18 @@ filesize:	dd	compilersize		; phdr.p_filesz
 
 		dd	DATAOFFSET + arraysize	; phdr.p_memsz
 
-; The rest of the eof routine. eax points to the location in the
-; program header table which needs to contain the compiled file's
-; size, and so this value is moved to edi. The size of the compiled
-; program is stored at filesize, and then this value is moved into
-; edx. ecx has already been set to TEXTORG, and so the routine then
-; proceeds to send the compiled program to stdout, after which it
-; exits. (Note that the first instruction encodes to 0x97. The three
-; low bits are the three low bits of the p_flags field, and mark the
-; memory image of the compiler and its compiled programs as being
-; readable, writeable, and executable.)
+; The code chunk for the "." instruction. eax is set to 4 to invoke
+; the write system call. ebx, the file handle to write to, is set to 1
+; for stdout. ecx points to the buffer containing the bytes to output,
+; and edx equals the number of bytes to output. (Note that the first
+; byte of the first instruction, which is also the least significant
+; byte of the p_flags field, encodes to 0xB3. Having the 2-bit set
+; marks the memory containing the compiler, and its compiled programs,
+; as writeable.)
 
-eofpt2:		xchg	eax, edi		; phdr.p_flags
-		stosd
-		xchg	eax, edx
-
-; The code chunk for the "." instruction. eax == 4 to invoke the write
-; system call. ebx is the file handle to write to, ecx points to the
-; buffer containing the bytes to output, and edx equals the number of
-; bytes to output.
-
-putchar:	mov	al, 4			; phdr.p_align
-		mov	bl, 1
-		int	0x80
+putchar:	mov	bl, 1			; phdr.p_flags
+		mov	al, 4
+		int	0x80			; phdr.p_align
 
 ; The epilog code chunk. After restoring the initialized registers,
 ; eax and ebx are both zero. eax is incremented to 1, so as to invoke
@@ -164,9 +166,10 @@ decchar:	dec	byte [ecx]
 
 ; The main loop of the compiler continues here, by obtaining the next
 ; character of input. This is also the code chunk for the ","
-; instruction. eax == 3 to invoke the read system call. ebx contains
-; the file handle to read from, ecx points to a buffer to receive the
-; bytes that are read, and edx equals the number of bytes to read.
+; instruction. eax is set to 3 to invoke the read system call. ebx,
+; the file handle to read from, is set to 0 for stdin. ecx points to a
+; buffer to receive the bytes that are read, and edx equals the number
+; of bytes to read.
 
 getchar:	mov	al, 3
 		xor	ebx, ebx
@@ -212,8 +215,8 @@ getchar:	mov	al, 3
 		jz	emit6bytes
 
 ; The remaining instructions, "[" and "]", have special routines for
-; emitting the proper code. (Note that the short jump back to the
-; beginning of the main loop is barely in range. Routines below here
+; emitting the proper code. (Note that the jump back to the main
+; loop is at the edge of the short-jump range. Routines below here
 ; therefore use this jump as a relay to return to the main loop;
 ; however, in order to use it correctly, the routines must be sure
 ; that the zero flag is cleared at the time.)
@@ -225,7 +228,7 @@ relay:		jnz	compile
 
 ; The endbracket routine emits code for the "]" instruction, as well
 ; as completing the code for the matching "[". The compiler first
-; emits an "or [ecx], dh" and the first two bytes of a "jnz near".
+; emits "cmp dh, [ecx]" and the first two bytes of a "jnz near".
 ; The location of the missing target in the code for the "["
 ; instruction is then retrieved from the stack, the correct target
 ; value is computed and stored, and then the current instruction's
@@ -241,23 +244,18 @@ endbracket:	add	esi, byte branch - putchar
 		stosd
 		jmp	short relay
 
-; The last routine of the compiler, called when there is no more
-; input. The epilog code chunk is copied into the code buffer. The
-; text origin is popped off the stack and subtracted from edi to
-; determine the size of the compiled program. The routine then
-; continues at eofpt2.
+; This is the entry point, for both the compiler and its compiled
+; programs. The shared initialization code sets eax and ebx to zero,
+; ecx to the beginning of the array that is the compiled programs's
+; data area, and edx (which is always zero on startup) to one. (This
+; also clears the zero flag for the relay jump below.) The registers
+; are then saved on the stack, to be restored at the very end.
 
-eof:		movsd
-		xchg	eax, ecx
-		pop	ecx
-		sub	edi, ecx
-		jmp	short eofpt2
-
-; The initialization process continues here. The value of edx is
-; bumped up to one, and the registers are saved on the stack (to be
-; retrieved at the very end).
-
-initpt2:	inc	edx
+_start:
+		xor	eax, eax
+		xor	ebx, ebx
+		mov	ecx, DATAORG
+		inc	edx
 		pusha
 
 ; At this point, the compiler and its compiled programs diverge.
@@ -270,7 +268,8 @@ initpt2:	inc	edx
 ; to filesize. edi is set equal to codebuf, and then the compiler
 ; enters the main loop.
 
-codebuf:	mov	ch, (TEXTORG >> 8) & 0xFF
+codebuf:
+		mov	ch, (TEXTORG >> 8) & 0xFF
 		push	ecx
 		mov	cl, filesize - $$
 		lea	edi, [byte ecx + codebuf - filesize]

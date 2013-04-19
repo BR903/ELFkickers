@@ -1,0 +1,21 @@
+rebind is a small utility that allows one to modify the binding
+strength of an exported symbol in an ELF object file.
+
+There are two different types of global symbol bindings. The first is
+STB_GLOBAL. A global symbol can appear in multiple ELF files, but it
+must be an undefined reference in all but one place. The second type
+of binding is STB_WEAK. A weak symbol acts identically to a global
+symbol only as long as there exists no global symbol with the same
+name. If there is, however, then the weak symbol is ignored in favor
+of the global symbol, and the condition is not treated as a name
+collision error.
+
+The GNU C compiler permits the user to make a global function or
+variable weak via the __attribute__ extension. The GNU assembler uses
+the .weak directive to accomplish the same thing. Most other tools
+offer no way to export a weak symbol instead of a global one, so this
+program can be seen as providing an alternate method for doing this.
+This program can also be used to directly see how changing a symbol's
+binding can affect the linking stage. And, hopefully, it also provides
+a template for writing other specialized programs for making minor,
+in-place modifications to ELF files.

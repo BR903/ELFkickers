@@ -1,7 +1,7 @@
 /* outbasic.c: The low-level output functions.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -78,7 +78,7 @@ char const *cqchar(int ch)
 	buf[2] = '\'';
 	buf[3] = '\0';
     } else
-	sprintf(buf, "0x%02X", ch);
+	sprintf(buf, "0x%02X", (unsigned char)ch);
     return buf;
 }
 
@@ -238,10 +238,20 @@ void outf(char const *fmt, ...)
     int			n;
 
     va_start(args, fmt);
+#if 0
     while (!bufsize || (n = vsnprintf(buf, bufsize, fmt, args)) < 0) {
 	bufsize += rmargin;
 	xalloc(buf, bufsize);
     }
+#else
+    for (;;) {
+	bufsize += rmargin;
+	xalloc(buf, bufsize);
+	n = vsnprintf(buf, bufsize, fmt, args);
+	if (n >= 0 && n < bufsize)
+	    break;
+    }
+#endif
     va_end(args);
     out(buf);
 }

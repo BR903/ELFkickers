@@ -1,7 +1,7 @@
 /* shdrtab.c: Functions for handling the section header table entries.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdlib.h>
@@ -112,20 +112,22 @@ int enumsections(Elf32_Ehdr const *ehdr, Elf32_Shdr const *shdrsin,
     return TRUE;
 }
 
-/* Output the C enum containing the section header names.
+/* Output the C enum containing the section header names. Returns
+ * FALSE if names are not available.
  */
-void outshdrnames(void)
+int outshdrnames(void)
 {
     int	i;
 
-    if (shdrnum && shdrnames) {
-	out("enum sections");
-	beginblock(TRUE);
-	outf("%s = 1", shdrnames[1]);
-	for (i = 2 ; i < shdrnum ; ++i)
-	    out(shdrnames[i]);
-	out("SHN_COUNT");
-	endblock();
-	out("\n");
-    }
+    if (!shdrnum || !shdrnames)
+	return FALSE;
+    out("enum sections");
+    beginblock(TRUE);
+    outf("%s = 1", shdrnames[1]);
+    for (i = 2 ; i < shdrnum ; ++i)
+	out(shdrnames[i]);
+    out("SHN_COUNT");
+    endblock();
+    out("\n");
+    return TRUE;
 }

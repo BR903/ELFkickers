@@ -1,8 +1,7 @@
 #  Makefile for ebfc
 
 CC = gcc
-CFLAGS = -ggdb -Wall -W -ansi
-LDFLAGS = $(CFLAGS)
+CFLAGS = -ggdb -Wall
 
 ebfc: ebfc.o brainfuck.o libelfparts.a
 

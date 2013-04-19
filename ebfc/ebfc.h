@@ -1,13 +1,13 @@
 /* ebfc.h: Shared functions and definitions.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #ifndef	_ebfc_h_
 #define	_ebfc_h_
 
-#include	<stdio.h>
+#include	"elfparts.h"
 
 #ifndef TRUE
 #define	TRUE		1
@@ -39,7 +39,8 @@ extern int err(char const *fmt, ...);
  * values. The return value is false if a fatal error occurs.
  */
 extern int translatebrainfuck(char const *filename, blueprint const *bp,
-			      int codetype, char const *function);
+			      int codetype, char const *function,
+			      int compressed);
 
 /* Completes the relocations and other fixups that were added by
  * the previous function.

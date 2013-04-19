@@ -4,7 +4,7 @@
 ebfc \- ELF Brainfuck compiler
 .SH SYNOPSIS
 .B ebfc
-[\-lxcshv] [\-f FUNCTION] [\-o FILE] [\-i FILE] SRCFILE
+[\-lxcszhv] [\-f FUNCTION] [\-o FILE] [\-i FILE] SRCFILE
 .SH DESCRIPTION
 .B ebfc
 is a compiler for the Brainfuck programming language, creating ELF
@@ -90,6 +90,9 @@ Display help and exit.
 .TP
 .BI \-v
 Display version number and exit.
+.TP
+.BI \-z
+Read the source file in compressed Brainfuck format.
 .SH LINKING
 When calling a compiled Brainfuck program from within a C program, the
 C prototype for the Brainfuck function should have the form:
@@ -103,33 +106,35 @@ beginning of this array.
 .P
 The Brainfuck programming language consists of eight commands, each of
 which is represented as a single character.
-.TP
-.BI >
+.TP 4
+.PD 0
+.B >
 Increment the pointer.
 .TP
-.BI <
+.B <
 Decrement the pointer.
 .TP
-.BI +
+.B +
 Increment the byte at the pointer.
 .TP
-.BI \-
+.B \-
 Decrement the byte at the pointer.
 .TP
-.BI .
+.B .
 Output the byte at the pointer.
 .TP
-.BI ,
+.B ,
 Input a byte and store it in the byte at the pointer.
 .TP
-.BI [
+.B [
 Jump to the matching
-.I ]
+.B ]
 if the byte at the pointer is zero.
 .TP
-.BI ]
+.B ]
 Jump to the matching
-.IR [ .
+.BR [ .
+.PD 1
 .P
 Any other characters in the source code are treated as comments or
 whitespace, and ignored.
@@ -139,17 +144,87 @@ expressed in terms of C, as follows (assuming that
 .I p
 has been previously defined as a
 .IR char* ):
+.TP 4
+.PD 0
+.B >
+becomes\ \ ++p;
+.TP
+.B <
+becomes\ \ \-\-p;
+.TP
+.B .
+becomes\ \ putchar(*p);
+.TP
+.B ,
+becomes\ \ *p = getchar();
+.TP
+.B [
+becomes\ \ while (*p) {
+.TP
+.B ]
+becomes\ \ }
+.PD 1
+.SH COMPRESSED BRAINFUCK
+Chris Pressey introduced a compressed format for storing and
+transmitting Brainfuck programs, which
+.B ebfc
+can read natively by using the
+.I \-z
+option.
 .P
-\"
-    >  becomes  ++p;
-    <  becomes  --p;
-    +  becomes  ++*p;
-    -  becomes  --*p;
-    .  becomes  putchar(*p);
-    ,  becomes  *p = getchar();
-    [  becomes  while (*p) {
-    ]  becomes  }
-\"
+In compressed Brainfuck, the eight commands are encoded in three bits
+as follows:
+.TP 4
+.PD 0
+.B +
+000
+.TP
+.B \-
+001
+.TP
+.B <
+010
+.TP
+.B >
+011
+.TP
+.B [
+100
+.TP
+.B ]
+101
+.TP
+.B ,
+110
+.TP
+.B .
+111
+.PD 1
+.P
+Each byte in a compressed Brainfuck file can contain two or more
+commands. The top two bits select between one of four possible
+readings of the lower six bits, as follows:
+.TP 24
+.PD 0
+Encoding\ \ \ \ Bits
+Translation
+.TP
+singleton\ \ \ 00 abc abc
+abc
+.TP
+pair\ \ \ \ \ \ \ \ 00 abc def
+abc followed by def
+.TP
+triplet\ \ \ \ \ 10 ab cd ef
+0ab then 0cd then 0ef
+.TP
+repetition\ \ 01 abc def
+def repeated 2 + abc times (2-9)
+.TP
+repetition\ \ 01 abcd ef
+0ef repeated 2 + abcd times (2-17)
+.PD 1
+.P
 .SH ERRORS
 The compiler will issue an error message, and the compilation will
 fail, if the program contains unbalanced bracket commands, or if the

@@ -1,7 +1,7 @@
 /* brainfuck.c: The Brainfuck compiler proper.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -183,6 +183,82 @@ static int translatecmd(int cmd, char arg)
     return TRUE;
 }
 
+/* Reads a Brainfuck source file and calls translatecmd() on the
+ * contents. Repeated commands are conglomerated and translated into
+ * single instructions.
+ */
+static int translateuncompressed(FILE *fp)
+{
+    static char		lkup[128] = { 0 };
+    int			cmd;
+    int			lastcmd;
+    char		lastarg;
+
+    lkup['+'] = lkup['-'] = lkup['<'] = lkup['>'] = 1;
+    lkup[','] = lkup['.'] = lkup['['] = lkup[']'] = 1;
+
+    lastcmd = 0;
+    while ((cmd = fgetc(fp)) != EOF) {
+	if ((unsigned int)cmd >= sizeof lkup || !lkup[cmd])
+	    continue;
+	if (cmd == lastcmd && lastarg < 127)
+	    ++lastarg;
+	else {
+	    if (!translatecmd(lastcmd, lastarg))
+		return FALSE;
+	    lastcmd = cmd;
+	    lastarg = 1;
+	}
+    }
+    return translatecmd(lastcmd, lastarg) && translatecmd(EOF, 0);
+}
+
+/* Reads a compressed Brainfuck source file and calls translatecmd()
+ * on the contents. Compression scheme is as follows:
+ *
+ * 000: +  001: -  010: <  011: >  100: [  101: ]  110: ,  111: .
+ *
+ * 00xxxXXX = singleton:  xxx (when xxx == XXX)
+ * 00xxxyyy = pair:       xxx then yyy
+ * 10xxyyzz = triple:     0xx then 0yy then 0zz
+ * 01xxxyyy = repetition: yyy repeated 2+xxx times (2-9)
+ * 11xxxxyy = repetition: 0yy repeated 2+xxxx times (2-17)
+ */
+static int translatecompressed(FILE *fp)
+{
+    char const *cmdlist = "+-<>[],.";
+    int		byte;
+
+    if (!translatecmd(0, 0))
+	return FALSE;
+    while ((byte = fgetc(fp)) != EOF) {
+	switch (byte & 0xC0) {
+	  case 0x00:
+	    if (!translatecmd(cmdlist[(byte >> 3) & 7], 1))
+		return FALSE;
+	    if (((byte >> 3) & 7) != (byte & 7))
+		if (!translatecmd(cmdlist[byte & 7], 1))
+		    return FALSE;
+	    break;
+	  case 0x80:
+	    if (!translatecmd(cmdlist[(byte >> 4) & 3], 1) ||
+				!translatecmd(cmdlist[(byte >> 2) & 3], 1) ||
+				!translatecmd(cmdlist[byte & 3], 1))
+		return FALSE;
+	    break;
+	  case 0x40:
+	    if (!translatecmd(cmdlist[byte & 7], 2 + ((byte >> 3) & 7)))
+		return FALSE;
+	    break;
+	  case 0xC0:
+	    if (!translatecmd(cmdlist[byte & 3], 2 + ((byte >> 2) & 15)))
+		return FALSE;
+	    break;
+	}
+    }
+    return translatecmd(EOF, 0);
+}
+
 /* Adds entries to the relocation section and/or the symbol table,
  * depending on what kind of file is being generated.
  */
@@ -218,28 +294,21 @@ static void addrelocations(blueprint const *bp, int codetype,
     }
 }
 
-/* Reads the contents of the given file as a Brainfuck program and
- * compiles it into the text segment of the blueprint, as a global
- * function with the given name. Relocations and other fixups are
- * added as appropriate, though with incomplete values. The return
- * value is false if a fatal error occurs.
+/* Compiles the contents of the given file into the text segment of
+ * the blueprint, as a global function with the given name.
+ * Relocations and other fixups are added as appropriate, though with
+ * incomplete values. The return value is false if a fatal error
+ * occurs.
  */
 int translatebrainfuck(char const *filename, blueprint const *bp,
-		       int codetype, char const *function)
+		       int codetype, char const *function, int compressed)
 {
-    static char		lkup[128] = { 0 };
-    FILE	       *fp;
-    int			cmd;
-    int			lastcmd;
-    char		lastarg;
+    FILE       *fp;
 
-    if (!(fp = fopen(filename, "r"))) {
+    if (!(fp = fopen(filename, compressed ? "rb" : "r"))) {
 	err(NULL);
 	return FALSE;
     }
-
-    lkup['+'] = lkup['-'] = lkup['<'] = lkup['>'] =
-		lkup[','] = lkup['.'] = lkup['['] = lkup[']'] = 1;
 
     pos = 0;
     textbuf = bp->parts[P_TEXT].part;
@@ -251,20 +320,7 @@ int translatebrainfuck(char const *filename, blueprint const *bp,
       case ET_DYN:	emitobj(prolog_so);	break;
     }
 
-    lastcmd = 0;
-    while ((cmd = fgetc(fp)) != EOF) {
-	if ((unsigned int)cmd >= sizeof lkup || !lkup[cmd])
-	    continue;
-	if (cmd == lastcmd && lastarg < 127)
-	    ++lastarg;
-	else {
-	    if (!translatecmd(lastcmd, lastarg))
-		return FALSE;
-	    lastcmd = cmd;
-	    lastarg = 1;
-	}
-    }
-    if (!translatecmd(lastcmd, lastarg) || !translatecmd(EOF, 0))
+    if (!(compressed ? translatecompressed(fp) : translateuncompressed(fp)))
 	return FALSE;
 
     if (fclose(fp))

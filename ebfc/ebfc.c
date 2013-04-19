@@ -1,7 +1,7 @@
 /* ebfc.c: The central module.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -32,7 +32,7 @@
 /* The online help text.
  */
 static char const      *yowzitch =
-	"Usage: ebfc [-hvlxcs] [-o OBJFILE] [-i SRCNAME] [-f FUNCTION] FILE\n"
+	"Usage: ebfc [-hvlxcsz] [-o OBJFILE] [-i SRCNAME] [-f FUNCTION] FILE\n"
 	"   -h  Display this help\n"
 	"   -v  Display version information\n"
 	"   -x  Compile to a standalone executable\n"
@@ -41,6 +41,7 @@ static char const      *yowzitch =
 	"   -xc Compile to an object file for a standalone executable\n"
 	"   -lc Compile to an object file for a shared library\n"
 	"   -s  Smaller output: omit extra features in the object file\n"
+	"   -z  Read a compressed source file\n"
 	"   -o  Output the object code to OBJFILE\n"
 	"   -f  Set the program's function name to FUNCTION\n"
 	"   -i  Record the source filename as being SRCNAME\n";
@@ -48,7 +49,7 @@ static char const      *yowzitch =
 /* The version text.
  */
 static char const      *vourzhon =
-	"ebfc, version 1.0: Copyright (C) 1999 by Brian Raiter\n";
+	"ebfc, version 1.1: Copyright (C) 1999 by Brian Raiter\n";
 
 /* The contents of the .comment section.
  */
@@ -196,7 +197,7 @@ static int createparts(blueprint const *bp)
 /* Creates the contents of the various parts of the object file.
  */
 static int populateparts(blueprint const *bp, int codetype,
-			 char const *filename)
+			 char const *filename, int compressed)
 {
     if (addextras) {
 	if (bp->parts[P_COMMENT].shtype) {
@@ -210,7 +211,7 @@ static int populateparts(blueprint const *bp, int codetype,
     }
 
     thefilename = filename;
-    if (!translatebrainfuck(filename, bp, codetype, functionname))
+    if (!translatebrainfuck(filename, bp, codetype, functionname, compressed))
 	return FALSE;
     thefilename = NULL;
 
@@ -229,7 +230,8 @@ static int populateparts(blueprint const *bp, int codetype,
  * creating the object file image, compiling the source code, and
  * writing out the file.
  */
-static int compile(blueprint *bp, int codetype, char const *filename)
+static int compile(blueprint *bp, int codetype,
+		   char const *filename, int compressed)
 {
     struct stat	s;
 
@@ -237,7 +239,7 @@ static int compile(blueprint *bp, int codetype, char const *filename)
 	return FALSE;
     if (!setnames(bp, codetype, filename))
 	return FALSE;
-    if (!populateparts(bp, codetype, filename))
+    if (!populateparts(bp, codetype, filename, compressed))
 	return FALSE;
 
     thefilename = outfilename;
@@ -266,12 +268,14 @@ int main(int argc, char *argv[])
 {
     blueprint	b = { 0 };
     int		codetype = 0;
+    int		compressed = FALSE;
     int		n;
 
     thisprog = argv[0];
 
-    while ((n = getopt(argc, argv, "cf:hi:lo:svx")) != EOF) {
+    while ((n = getopt(argc, argv, "cf:hi:lo:svxz")) != EOF) {
 	switch (n) {
+	  case 'z':	compressed = TRUE;				break;
 	  case 'c':	b.filetype = ET_REL;				break;
 	  case 'x':	codetype = ET_EXEC;				break;
 	  case 'l':	codetype = ET_DYN;				break;
@@ -308,5 +312,6 @@ int main(int argc, char *argv[])
 	return EXIT_FAILURE;
     }
 
-    return compile(&b, codetype, argv[optind]) ? EXIT_SUCCESS : EXIT_FAILURE;
+    return compile(&b, codetype, argv[optind], compressed) ? EXIT_SUCCESS
+							   : EXIT_FAILURE;
 }

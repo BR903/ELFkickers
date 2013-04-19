@@ -15,11 +15,10 @@ of the command-line options and of the Brainfuck language itself.
 
 Most of the code that deals with creating the ELF file is built into a
 separate library, called elfparts. This library is too primitive to be
-a real general-purpose library (though it might serve as a good
-foundation for such a thing). The main justification for the
-separation is to clearly distinguish the compilation activities from
-the more general housekeeping involved in building a functional ELF
-file.
+a real general-purpose library (though it might serve as a starting
+point for such a thing). The main justification for the separation is
+to clearly distinguish the compilation activities from the more
+general housekeeping involved in building a functional ELF file.
 
 The file elfparts.txt contains a description of the library interface.
 

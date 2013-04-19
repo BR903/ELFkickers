@@ -1,5 +1,9 @@
-;; fgconsole.asm: Copyright (C) 1999 by Brian Raiter, under the GNU
-;; General Public License. No warranty. See COPYING for details.
+;; fgconsole.asm: Copyright (C) 1999-2001 by Brian Raiter, under the
+;; GNU General Public License (version 2 or later). No warranty.
+;;
+;; To build:
+;;	nasm -f bin -o fgconsole fgconsole.asm && chmod +x fgconsole
+
 
 BITS 32
 
@@ -13,8 +17,9 @@ BITS 32
 		dd	$$
 		dw	2
 		dw	3
-entry:		mov	edx, esp		; Use top of stack as a buffer
-		add	eax, (ORIGIN + entry - $$) << 8
+entry		equ	ORIGIN + ($ - $$)
+		mov	edx, esp		; Use top of stack as a buffer
+		add	eax, entry << 8
 		push	dword 4			; 4 == the write syscall no.
 		xor	ebx, ebx		; 0 == stdin
 		lea	eax, [byte ebx + 54]	; 54 == the ioctl syscall no.

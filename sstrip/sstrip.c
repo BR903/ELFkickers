@@ -1,5 +1,5 @@
-/* sstrip, version 1.0: Copyright (C) 1999 by Brian Raiter, under the
- * GNU General Public License. No warranty. See COPYING for details.
+/* sstrip: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
+ * General Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -76,7 +76,7 @@ static int readheaders(void)
     if (elfhdr.e_phentsize != sizeof(Elf32_Phdr)) {
 	fprintf(stderr, "%s: unrecognized program header size "
 			"(size = %u instead of %u).\n",
-			thefilename, elfhdr.e_phentsize, sizeof(Elf32_Ehdr));
+			thefilename, elfhdr.e_phentsize, sizeof(Elf32_Phdr));
 	return FALSE;
     }
 

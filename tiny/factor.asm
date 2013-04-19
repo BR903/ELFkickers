@@ -1,9 +1,12 @@
-;; factor.asm: Copyright (C) 1999 by Brian Raiter, under the GNU
-;; General Public License. No warranty.
+;; factor.asm: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
+;; General Public License (version 2 or later). No warranty.
+;;
+;; To build:
+;;	nasm -f bin -o factor factor.asm && chmod +x factor
 ;;
 ;; Usage: factor [N]...
-;; Print the prime factors of each N. With no arguments, read N from
-;; standard input. The valid range is 0 <= N < 10^18.
+;; Prints the prime factors of each N. With no arguments, reads N
+;; from standard input. The valid range is 0 <= N < 2^64.
 
 BITS 32
 
@@ -11,19 +14,19 @@ BITS 32
 %define	stdout		1
 %define	stderr		2
 
-;;; The program's data
+;; The program's data
 
-%define	buf_size	88
+%define	iobuf_size	96
 
 STRUC data
-bcd80:		resb	12		; buffer for 80-bit BCD numbers
-read_rel:	resd	1		; ptr to read() function
-quotient:	resb	12		; buffer for 80-bit floating-points
-write_rel:	resd	1		; ptr to write() function
-factor:		resd	1		; number being tested for factorhood
-exit_rel:	resd	1		; ptr to _exit() function
-buf:		resb	buf_size	; buffer for I/O
+factor:		resd	2		; number being tested for factorhood
+getchar_rel:	resd	1		; pointer to getchar() function
+write_rel:	resd	1		; pointer to write() function
+buf:		resd	3		; general-purpose numerical buffer
+exit_rel:	resd	1		; pointer to _exit() function
+iobuf:		resb	iobuf_size	; buffer for I/O
 ENDSTRUC
+
 
 		org	0x08048000
 
@@ -99,7 +102,7 @@ dynamic:
 dynamicsz	equ	$ - dynamic + 8
 
 ;; The dynamic symbol table. Entries are included for the _DYNAMIC
-;; section and the three functions imported from libc: read(),
+;; section and the three functions imported from libc: getchar(),
 ;; write(), and _exit().
 
 dynsym:
@@ -120,8 +123,8 @@ exit_sym	equ	2
 		dd	0
 		dw	0x12			; STB_GLOBAL, STT_FUNC
 		dw	0
-read_sym	equ	3
-		dd	read_name
+getchar_sym	equ	3
+		dd	getchar_name
 		dd	0
 		dd	0
 		dw	0x22			; STB_WEAK, STT_FUNC
@@ -141,9 +144,9 @@ reltext:
 		db	1			; R_386_32
 		db	write_sym
 		dw	0
-		dd	dataorg + read_rel
+		dd	dataorg + getchar_rel
 		db	1			; R_386_32
-		db	read_sym
+		db	getchar_sym
 		dw	0
 		dd	dataorg + exit_rel
 		db	1			; R_386_32
@@ -168,54 +171,73 @@ dynamic_name	equ	$ - dynstr
 		db	'_DYNAMIC', 0
 exit_name	equ	$ - dynstr
 		db	'_exit', 0
-read_name	equ	$ - dynstr
-		db	'read', 0
+getchar_name	equ	$ - dynstr
+		db	'getchar', 0
 write_name	equ	$ - dynstr
 		db	'write', 0
 dynstrsz	equ	$ - dynstr
+
 
 ;;
 ;; The program proper
 ;;
 
-;; factorize is the main subroutine of the program. It is called with edi
+
+;; The factorconst subroutine, called by factorize, repeatedly divides
+;; the number at the top of the floating-point stack by the integer
+;; stored in buf as long as the number continues to divide evenly. For
+;; each successful division, the number is also displayed on standard
+;; output. Upon return, the quotient of the failed division is at the
+;; top of the floating-point stack, just above the factored number.
+
+factorconst:						; num  +
+		fild	dword [ebx]			; div  num  +
+.loop:		fld	st1				; num  div  num  +
+		fdiv	st0, st1			; quot div  num  +
+		fld	st0				; quot quot div  num  +
+		frndint					; quoi quot div  num  +
+		fcomp	st1				; quot div  num  +
+		fnstsw	ax
+		and	ah, 0x40
+		jz	factorize.return
+		fstp	st2				; div  quot +
+		call	ebp
+		jmp	short .loop
+
+
+;; factorize is the main subroutine of the program. It is called with esi
 ;; pointing to an NUL-terminated string representing the number to factor.
 ;; Upon return, eax contains a nonzero value if an error occurred (i.e.,
-;; an invalid number stored at edi).
+;; an invalid number stored at esi).
 
 factorize:
 
 ;; The first step is to translate the string into a number. 10.0 and 0.0
-;; are pushed onto the floating-point stack, and the start of the string
-;; is saved in esi.
+;; are pushed onto the floating-point stack.
 
-		push	byte 10
-		fild	dword [esp]
-		pop	eax
-		fldz
-		mov	esi, edi
+		xor	eax, eax
+		fild	word [byte ebx + ten - dataorg]	; 10.0
+		fldz					; num  10.0
 
 ;; Each character in the string is checked; if it is not in the range
 ;; of '0' to '9' inclusive, an error message is displayed and the
 ;; subroutine aborts. Otherwise, the top of the stack is multiplied by
 ;; ten and the value of the digit is added to the product. The loop
-;; exits when a NUL byte is found. The subroutine also aborts if there
-;; are more than eighteen digits in the string.
+;; exits when a NUL byte is found.
 
 .atoiloop:
 		lodsb
 		or	al, al
 		jz	.atoiloopend
-		fmul	st0, st1
+		fmul	st0, st1			; n10  10.0
 		sub	al, '0'
 		jc	.errbadnum
 		cmp	al, 10
 		jnc	.errbadnum
-		mov	[ebx], eax
-		fiadd	dword [ebx]
+		mov	[byte ebx + buf], eax
+		fiadd	dword [byte ebx + buf]		; num  10.0
 		jmp	short .atoiloop
 .errbadnum:
-		fcompp
 		push	byte errmsgbadnumsz
 		lea	eax, [byte ebx + errmsgbadnum - dataorg]
 		push	eax
@@ -223,92 +245,90 @@ factorize:
 		call	[byte ebx + write_rel]
 		add	esp, byte 12
 		mov	al, 1
+.return:	fcompp
 		ret
 .atoiloopend:
-		sub	esi, edi
-		cmp	esi, byte 20
-		jnc	.errbadnum
 
-;; The number is stored as a 10-byte BCD number and the itoa80
-;; subroutine is used to display the number, followed by a colon. If
-;; the number is less than two, no factoring should be done and the
-;; subroutine skips ahead to the final stage.
+;; The number's exponent is examined, and if the number is 2^64 or
+;; greater, it is rejected.
+
+		fld	st0				; num  num  10.0
+		fstp	tword [byte ebx + buf]		; num  10.0
+		mov	eax, [byte ebx + buf + 8]
+		cmp	ax, 64 + 0x3FFF
+		jge	.errbadnum
+
+;; The number is displayed, followed by a colon. If the number is one
+;; or zero, no factoring should be done and the subroutine skips ahead
+;; to the end.
 							; num  junk
-		fld	st0				; num  num  junk
-		fxch	st2				; junk num  num
-		fcomp	st0				; num  num
-		fbstp	[ebx]				; num
-		mov	al, ':'
-		call	itoa80nospc
-		xor	ecx, ecx
-		cmp	[byte ebx + 8], ecx
-		jnz	.numberok
-		cmp	[byte ebx + 4], ecx
-		jnz	.numberok
-		cmp	dword [ebx], byte 2
-		jc	near .earlyout
-.numberok:
+		mov	dl, ':'
+		call	itoa64nospc
+		fxch	st1				; junk num
+		fld1					; 1.0  junk num
+		fcom	st2
+		fstsw	ax
+		and	ah, 0x45
+		cmp	ah, 1
+		jnz	.earlyout
+		fcompp					; num
 
-;; The factorconst subroutine is called three times, with bcd80 set to
-;; two, three, and five, respectively.
+;; The factorconst subroutine is called three times, with the number
+;; in buf set to two, three, and five, respectively.
 
-		mov	[byte ebx + 8], ecx
-		mov	[byte ebx + 4], ecx
-		mov	cl, 2
-		mov	[ebx], ecx
-		call	factorconst			; junk num
-		fstp	st0				; num
+		mov	edi, factorconst
+		xor	edx, edx
+		mov	dl, 2
+		mov	[ebx], edx
+		call	edi
 		inc	dword [ebx]
-		call	factorconst			; junk num
-		fstp	st0				; num
+		call	edi
 		mov	byte [ebx], 5
-		call	factorconst			; junk num
+		call	edi
 
 ;; If the number is now equal to one, the subroutine is finished and
-;; exits early.
+;; exits immediately.
 
-		fld1					; 1.0  junk num
-		fcomp	st2				; junk num
+		fld1					; 1.0  num
+		fcom	st1
 		fnstsw	ax
 		and	ah, 0x40
 		jnz	.quitfactorize
-		xor	eax, eax
 
 ;; factor is initialized to 7, and edi is initialized with a sequence
 ;; of eight four-bit values that represent the cycle of differences
 ;; between subsequent integers not divisible by 2, 3, or 5. The
 ;; subroutine then enters its main loop.
-
-		mov	al, 7
-		mov	[byte ebx + factor], eax
-		fld	st1				; num  junk num
-		fidiv	dword [byte ebx + factor]	; quot junk num
+							; junk num
+		mov	byte [ebx], 7
+		fild	qword [ebx]			; fact junk num
+		fdivr	st0, st2			; quot junk num
 		mov	edi, 0x42424626
 
 ;; The loop returns to this point when the last tested value was not a
 ;; factor. The next value to test (for which the division operation
 ;; should just be finishing up) is moved into esi, and factor is
 ;; incremented by the value at the bottom of edi, which is first
-;; advanced to the next four-bit value.
+;; advanced to the next four-bit value. If it overflows, then we have
+;; exhausted all possible factors, and end.
 
 .notafactor:
-		mov	esi, [byte ebx + factor]
+		mov	esi, [ebx]
 		rol	edi, 4
 		mov	eax, edi
 		and	eax, byte 0x0F
-		add	[byte ebx + factor], eax
+		add	[ebx], eax
+		jc	.earlyout
 
 ;; The main loop of the factorize subroutine. The quotient from the
 ;; division of the number by the next potential factor is stored, and
 ;; the division for the next iteration is started.
 
 .mainloop:						; quot quo0 num
-		fld	st0				; quot quot quo0 num
-		fxch	st2				; quo0 quot quot num
-		fcomp	st0				; quot quot num
-		fstp	tword [byte ebx + quotient]	; quot num
-		fld	st1				; num  quot num
-		fidiv	dword [byte ebx + factor]	; quo2 quot num
+		fst	st1				; quot quot num
+		fstp	tword [byte ebx + buf]		; quot num
+		fild	qword [ebx]			; fact quot num
+		fdivr	st0, st2			; quo2 quot num
 
 ;; The integer portion of the quotient is isolated and tested against
 ;; the divisor (i.e., the potential factor). If the quotient is
@@ -317,27 +337,27 @@ factorize:
 ;; the current value for the number as the last factor, followed by a
 ;; newline character, and the subroutine ends.
 
-		mov	edx, [byte ebx + quotient + 4]
-		mov	ecx, 16383 + 31
-		sub	ecx, [byte ebx + quotient + 8]
+		mov	edx, [byte ebx + buf + 4]
+		mov	ecx, 31 + 0x3FFF
+		sub	ecx, [byte ebx + buf + 8]
 		js	.keepgoing
 		mov	eax, edx
 		shr	eax, cl
 		cmp	eax, esi
 		jnc	.keepgoing
-		fxch	st2
-		fbstp	[ebx]
-.earlyout:	call	itoa80
+.earlyout:	fxch	st2
+		call	ebp
+		fstp	st0
 .quitfactorize:	fcompp
 		push	byte 1
-		lea	edi, [byte ebx + newline - dataorg]
+		lea	esi, [byte ebx + ten - dataorg]
 		jmp	short finalwrite
 
 ;; Now the integer portion of the quotient is shifted out. If any
 ;; nonzero bits are left, then the number being tested is not a
 ;; factor, and the program loops back.
 
-.keepgoing:	mov	eax, [byte ebx + quotient]
+.keepgoing:	mov	eax, [byte ebx + buf]
 		neg	ecx
 		js	.shift32
 		xchg	eax, edx
@@ -349,93 +369,88 @@ factorize:
 
 ;; Otherwise, a new factor has been found. The number being factored
 ;; is therefore replaced with the quotient, and the result of the
-;; division in progress is ignored. The new factor is displayed, and
+;; division in progress is junked. The new factor is displayed, and
 ;; then is tested again. If this was the first time this factor was
 ;; tested, then edi is reset back.
-							; quo0 num  junk
-		cmp	[byte ebx + factor], esi
+							; junk num  num0
+		cmp	[ebx], esi
 		jz	.repeating
 		ror	edi, 4
-		mov	[byte ebx + factor], esi
-.repeating:	fstp	st0				; num  junk
-		fxch	st1				; junk num
-		fild	dword [byte ebx + factor]	; fact junk num
-		fld	st0				; fact fact junk num
-		fbstp	[ebx]				; fact junk num
+		mov	[ebx], esi
+.repeating:	ffree	st2				; junk num
+		fild	qword [ebx]			; fact junk num
+		call	ebp
 		fdivr	st0, st2			; quot junk num
-		push	edi
-		call	itoa80
-		pop	edi
-		mov	esi, [byte ebx + factor]
+		mov	esi, [ebx]
 		jmp	short .mainloop
 
-;; itoa80 is the numeric output subroutine. When the subroutine is
-;; called, the number to be displayed should be stored in the bcd80
-;; buffer, in the 10-byte BCD format. A space is prepended to the
-;; output, unless itoa80nospc is called, in which case the character
-;; in al is suffixed to the output.
 
-itoa80:
-		mov	al, ' '
-itoa80nospc:
+;; itoa64 is the numeric output subroutine. When the subroutine is
+;; called, the number to be displayed should be on the top of the
+;; floating-point stack, and there should be no more than four other
+;; numbers on the stack. A space is prefixed to the output, unless
+;; itoa64nospc is called, in which case the character in dl is
+;; suffixed to the output.
 
-;; edi is pointed to buf, esi is pointed to bcd80, and ecx, the
-;; counter, is initialized to eight.
+itoa64:
+		mov	dl, ' '
+itoa64nospc:
 
-		xor	ecx, ecx
-		mov	cl, 8
-		mov	esi, ebx
-		lea	edi, [byte ebx + buf + 1]
-		push	eax
-		push	edi
+;; A copy of the number is made, and 10 is placed on the stack. esi is
+;; pointed to the end of the buffer that will hold the decimal
+;; representation, with ecx pointing just past the end.
+							; num  +
+		fld	st0				; num  num  +
+		fild	word [byte ebx + ten - dataorg]	; 10.0 num  num  +
+		lea	esi, [byte ebx + iobuf + 32]
+		mov	ecx, esi
+		dec	esi
 
-;; The BCD number is read from top to bottom (the sign byte is
-;; ignored). The two nybbles in each byte are split apart, turned into
-;; ASCII digits, and stored in buf.
+;; At each iteration, the number is reduced modulo 10. This remainder
+;; is subtracted from the number (and stored in iobuf as an ASCII
+;; digit). The difference is then divided by ten, and if the quotient
+;; is zero the loop exits. Otherwise, the quotient replaces the number
+;; for the next iteration.
 
-.loop:		mov	al, [esi + ecx]
-		aam	16
-		xchg	al, ah
-		add	ax, 0x3030
-		stosw
-		dec	ecx
-		jns	.loop
-
-;; The end of the string is stored in edx, and then edi is set to
-;; point to the first character of the string that is not a zero
-;; (unless the string is all zeros, in which case the last zero is
-;; retained.
-
-		mov	edx, edi
-		pop	edi
-		add	ecx, byte 19
+.loop:
+		fld	st1				; num  10.0 num  num  +
+		fprem					; rem  10.0 num  num  +
+		fist	dword [ecx]			; rem  10.0 num  num  +
+		fsubr	st0, st2			; 10n2 10.0 num  num  +
+		ftst
+		fstsw	ax
+		fstp	st2				; 10.0 10n2 num  +
+		fdiv	st1, st0			; 10.0 num2 num  +
 		mov	al, '0'
-		repz scasb
-		dec	edi
+		add	al, [ecx]
+		mov	[esi], al
+		dec	esi
+		and	ah, 0x40
+		jz	.loop
+		fcompp					; num  +
 
 ;; If al contains a space, it is added to the start of the string.
-;; Otherwise, al is added to the end.
+;; Otherwise, the character is added to the end.
 
-		pop	eax
-		cmp	al, ' '
+		mov	[esi], dl
+		cmp	dl, ' '
 		jz	.prefix
-		mov	[edx], al
-		inc	edx
-		jmp	short .suffix
-.prefix:	dec	edi
-		mov	[edi], al
-.suffix:
+		mov	[ecx], dl
+		inc	ecx
+		inc	esi
+.prefix:
 
 ;; The string is written to standard output, and the subroutine ends.
 
-		sub	edx, edi
-		push	edx
-finalwrite:	push	edi
+		sub	ecx, esi
+		push	ecx
+finalwrite:	push	esi
 		push	byte stdout
 		call	[byte ebx + write_rel]
 		add	esp, byte 12
 		dec	eax
 		ret
+
 
 ;; Here is the program's entry point.
 
@@ -444,18 +459,19 @@ _start:
 ;; argc and argv[0] are removed from the stack and discarded. ebx is
 ;; initialized to point to the data.
 
-		pop	edi
+		pop	esi
 		pop	ebx
 		mov	ebx, dataorg
+		mov	ebp, itoa64
 
 ;; If argv[1] is NULL, then the program proceed to the input loop. If
 ;; argv[1] begins with a dash, then the help message is displayed.
 ;; Otherwise, the program begins readings the command-line arguments.
 
-		pop	edi
-		or	edi, edi
+		pop	esi
+		or	esi, esi
 		jz	.inputloop
-		cmp	byte [edi], '-'
+		cmp	byte [esi], '-'
 		jz	.dohelp
 
 ;; The factorize subroutine is called once for each command-line
@@ -464,18 +480,18 @@ _start:
 
 .argloop:
 		call	factorize
-		pop	edi
-		or	edi, edi
+		pop	esi
+		or	esi, esi
 		jnz	.argloop
 .mainexit:	push	eax
 		call	[byte ebx + exit_rel]
 
-;; The input loop routine. edi is pointed to buf, and esi is
-;; initialized to one less than the size of buf.
+;; The input loop routine. edi is pointed to iobuf, and esi is
+;; initialized to one less than the size of iobuf.
 
 .inputloop:
-		lea	edi, [byte ebx + buf]
-		push	byte buf_size - 1
+		lea	edi, [byte ebx + iobuf]
+		push	byte iobuf_size - 1
 		pop	esi
 
 ;; The program reads and discards one character at a time, until a
@@ -483,9 +499,9 @@ _start:
 ;; available, in which case the program exits).
 
 .preinloop:
-		call	readchar
-		jns	.mainexit
-		mov	al, [edi]
+		call	[byte ebx + getchar_rel]
+		or	eax, eax
+		js	.mainexit
 		cmp	al, ' '
 		jz	.preinloop
 		cmp	al, 9
@@ -494,30 +510,30 @@ _start:
 		jc	.preinloop
 
 ;; The first non-whitespace character is stored at the beginning of
-;; buf. The program continues to read characters until there is no
-;; more input, there is no more room in buf, or until another
+;; iobuf. The program continues to read characters until there is no
+;; more input, there is no more room in iobuf, or until another
 ;; whitespace character is found.
 
 .incharloop:
-		inc	edi
+		stosb
 		dec	esi
 		jz	.infinish
-		call	readchar
-		jns	.infinish
-		mov	al, [edi]
+		call	[byte ebx + getchar_rel]
+		or	eax, eax
+		js	.infinish
 		cmp	al, ' '
 		jz	.infinish
 		cmp	al, 9
 		jc	.incharloop
 		cmp	al, 14
 		jnc	.incharloop
+.infinish:
 
 ;; A NUL is appended to the string obtained from standard input, the
 ;; factorize subroutine is called, and the program loops.
 
-.infinish:
 		mov	byte [edi], 0
-		lea	edi, [byte ebx + buf]
+		lea	esi, [byte ebx + iobuf]
 		call	factorize
 		jmp	short .inputloop
 
@@ -528,58 +544,23 @@ _start:
 		push	byte 0
 		push	dword [byte ebx + exit_rel]
 		push	byte helpmsgsz
-		lea	edi, [byte ebx + helpmsg - dataorg]
+		lea	esi, [byte ebx + helpmsg - dataorg]
 		jmp	short finalwrite
 
-;; The readchar subroutine reads a single byte from standard input and
-;; stores it in edi. Upon return, the sign flag is cleared if an error
-;; occurred or if no input was available.
-
-readchar:
-		push	byte 1
-		push	edi
-		push	byte stdin
-		call	[byte ebx + read_rel]
-		add	esp, byte 12
-		neg	eax
-return:		ret
-
-;; The factorconst subroutine, called by factorize, repeatedly divides
-;; the number at the top of the floating-point stack by the integer
-;; (which must be under 10) stored in bcd80 as long as the number
-;; continues to divide evenly. For each successful division, the
-;; number is also displayed on standard output. Upon return, the
-;; quotient of the failed division is at the top of the floating-point
-;; stack, and the factored number is below that.
-
-factorconst:
-		fld	st0				; num  num
-		fidiv	dword [ebx]			; quot num
-		fld	st0				; quot quot num
-		frndint					; quoi quot num
-		fcomp	st1				; quot num
-		fnstsw	ax
-		and	ah, 0x40
-		jz	return
-		fxch	st1				; num  quot
-		fstp	st0				; quot
-		call	itoa80
-		jmp	short factorconst
 
 ;; Messages to the user.
 
-helpmsg:	db	'factor: version 1.1', 10
-		db	'Print the prime factors of arguments/input. '
-		db	'Maximum value is 10^18 - 1.', 10
+helpmsg:	db	'Finds the prime factors of args/input', 10
+		db	'v1.2', 10
 helpmsgsz	equ	$ - helpmsg
 errmsgbadnum:	db	'invalid number'
-newline:	db	10
+ten:		db	10
 errmsgbadnumsz	equ	$ - errmsgbadnum
 
 ;; End of file image.
 
 filesz		equ	$ - $$
 
-dataorg		equ	$$ + ((filesz + 3) & ~3)
+dataorg		equ	$$ + ((filesz + 16) & ~15)
 
 memsz		equ	dataorg + data_size - $$

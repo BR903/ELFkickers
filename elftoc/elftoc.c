@@ -1,7 +1,7 @@
 /* elftoc.c: The central module.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -183,6 +183,105 @@ static int readhdrtables(void)
     return TRUE;
 }
 
+/* Uses the program header table to find the file offset corresponding
+ * to a memory address. -1 is returned if no such offset exists.
+ */
+static int memtofile(unsigned addr)
+{
+    Elf32_Phdr *phdr;
+    unsigned	i;
+
+    for (i = 0, phdr = phdrs ; i < ehdr->e_phnum ; ++i, ++phdr)
+	if (phdr->p_vaddr <= addr && phdr->p_vaddr + phdr->p_memsz > addr)
+	    return addr - phdr->p_vaddr + phdr->p_offset;
+    return -1;
+}
+
+/* Records the contents referenced by various entries in the dynamic
+ * object as separate pieces of the file. This function helps make up
+ * for the absence of such information when a file contains no section
+ * header table.
+ */
+static void getdynamicentries(Elf32_Dyn const *dynamic)
+{
+    Elf32_Dyn const    *dyn;
+    int			stroff = 0, relgoff = 0, relagoff = 0, relpoff = 0,
+			hashoff = 0, symoff = 0;
+    int			strsz = 0, relgsz = 0, relagsz = 0, relpsz = 0,
+			symsz = 0, relptype = 0;
+    int		       *p;
+    int			i, n;
+
+    for (i = 0, dyn = dynamic ; dyn->d_tag != DT_NULL ; ++i, ++dyn) {
+	switch (dyn->d_tag) {
+	  case DT_STRTAB:	stroff = memtofile(dyn->d_un.d_val);	break;
+	  case DT_JMPREL:	relpoff = memtofile(dyn->d_un.d_val);	break;
+	  case DT_REL:		relgoff = memtofile(dyn->d_un.d_val);	break;
+	  case DT_RELA:		relagoff = memtofile(dyn->d_un.d_val);	break;
+	  case DT_HASH:		hashoff = memtofile(dyn->d_un.d_val);	break;
+	  case DT_SYMTAB:	symoff = memtofile(dyn->d_un.d_val);	break;
+
+	  case DT_STRSZ:	strsz = dyn->d_un.d_val;		break;
+	  case DT_PLTRELSZ:	relpsz = dyn->d_un.d_val;		break;
+	  case DT_RELSZ:	if (!relgsz) relgsz = dyn->d_un.d_val;	break;
+	  case DT_RELASZ:	if (!relagsz) relagsz = dyn->d_un.d_val;break;
+
+	  case DT_RELENT:
+	    if (dyn->d_un.d_val != sizeof(Elf32_Rel))
+		relgsz = -1;
+	    break;
+	  case DT_RELAENT:
+	    if (dyn->d_un.d_val != sizeof(Elf32_Rela))
+		relagsz = -1;
+	    break;
+	  case DT_SYMENT:
+	    if (dyn->d_un.d_val != sizeof(Elf32_Sym))
+		symsz = -1;
+	    break;
+	  case DT_PLTREL:
+	    relptype = dyn->d_un.d_val == DT_REL ? P_REL : P_RELA;
+	    break;
+	}
+    }
+
+    if (stroff > 0 && strsz > 0) {
+	if (stroff + strsz > thefilesize)
+	    strsz = thefilesize - stroff;
+	recordpiece(stroff, strsz, P_SECTION, 0, "~dynstr");
+    }
+    if (relgoff > 0 && relgsz > 0) {
+	if (relgoff + relgsz > thefilesize)
+	    relgsz = thefilesize - relgoff;
+	recordpiece(relgoff, relgsz, P_REL, 0, "~rel_got");
+    }
+    if (relagoff > 0 && relagsz > 0) {
+	if (relagoff + relagsz > thefilesize)
+	    relagsz = thefilesize - relagoff;
+	recordpiece(relagoff, relagsz, P_RELA, 0, "~rela_got");
+    }
+    if (relpoff > 0 && relpsz > 0 && relptype) {
+	if (relpoff + relpsz > thefilesize)
+	    relpsz = thefilesize - relpoff;
+	recordpiece(relpoff, relpsz, relptype, 0,
+		    relptype == P_REL ? "~rel_plt" : "~rela_plt");
+    }
+    if (hashoff > 0) {
+	if ((p = getarea(hashoff, 8))) {
+	    n = (p[0] + p[1] + 2) * sizeof(Elf32_Word);
+	    if (hashoff + n > thefilesize)
+		n = thefilesize - hashoff;
+	    recordpiece(hashoff, n, P_HASH, 0, "~hash");
+	    if (symoff > 0 && !symsz) {
+		n = p[1] * sizeof(Elf32_Sym);
+		if (symoff + n > thefilesize)
+		    n = thefilesize - symoff;
+		recordpiece(symoff, n, P_SYMTAB, 0, "~dynsym");
+	    }
+	    free(p);
+	}
+    }
+}
+
 /* Records the contents referenced by the various entries in the
  * program header table and the section header table, each as a
  * separate piece of the file. Attempts to assign each piece an
@@ -201,7 +300,8 @@ static int recordsections(void)
 	      case PT_NULL:	type = 0;				break;
 	      case PT_PHDR:	type = P_PHDRTAB;  str = "~phdrs";	break;
 	      case PT_DYNAMIC:	type = P_DYNAMIC;  str = "~dynamic";	break;
-	      case PT_NOTE:	type = P_BYTES;	   str = "~note";	break;
+	      case PT_INTERP:	type = P_SECTION;  str = "~interp";	break;
+	      case PT_NOTE:	type = P_SECTION;  str = "~note";	break;
 	      default:		type = P_BYTES;	   str = NULL;		break;
 	    }
 	    if (!type)
@@ -222,6 +322,8 @@ static int recordsections(void)
 	    if ((phdrs[i].p_flags & PF_R) && phdrs[i].p_vaddr)
 		recordaddr(phdrs[i].p_vaddr, phdrs[i].p_offset,
 			   phdrs[i].p_memsz, str);
+	    if (type == P_DYNAMIC)
+		getdynamicentries(getarea(phdrs[i].p_offset, j));
 	}
     }
 

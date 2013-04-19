@@ -1,7 +1,7 @@
 /* pieces.h: Functions for handling the file as a sequence of pieces.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #ifndef	_pieces_h_

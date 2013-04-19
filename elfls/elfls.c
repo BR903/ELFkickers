@@ -1,5 +1,5 @@
-/* elfls, version 1.0: Copyright (C) 1999 by Brian Raiter, under the
- * GNU General Public License. No warranty. See COPYING for details.
+/* elfls: Copyright (C) 1999-2001 by Brian Raiter, under the GNU
+ * General Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -326,9 +326,9 @@ static int readelfhdr(void)
     }
     if (elffhdr.e_version != EV_CURRENT) {
 	fprintf(stderr, "%s: unknown ELF header version "
-			"(version = %lu instead of %lu).\n",
-			thefilename, elffhdr.e_version,
-			(unsigned long)EV_CURRENT);
+			"(version = %u instead of %u).\n",
+			thefilename, (unsigned int)elffhdr.e_version,
+			(unsigned int)EV_CURRENT);
 	return FALSE;
     }
     if (elffhdr.e_ehsize != sizeof elffhdr)
@@ -792,8 +792,9 @@ int main(int argc, char *argv[])
 	    printf("Program header table entries: %d", elffhdr.e_phnum);
 	    if (dooffs)
 		printf(" (%lX - %lX)",
-		       elffhdr.e_phoff, elffhdr.e_phoff +
-					elffhdr.e_phnum * elffhdr.e_phentsize);
+		       (unsigned long)elffhdr.e_phoff,
+		       (unsigned long)elffhdr.e_phoff +
+				elffhdr.e_phnum * elffhdr.e_phentsize);
 	    putchar('\n');
 	    lines = gettextlines(elffhdr.e_phnum);
 	    for (i = 0 ; i < elffhdr.e_phnum ; ++i) {
@@ -808,7 +809,8 @@ int main(int argc, char *argv[])
 	    printf("Section header table entries: %d", elffhdr.e_shnum);
 	    if (dooffs)
 		printf(" (%lX - %lX)",
-		       elffhdr.e_shoff, elffhdr.e_shoff +
+		       (unsigned long)elffhdr.e_shoff,
+		       (unsigned long)elffhdr.e_shoff +
 					elffhdr.e_shnum * elffhdr.e_shentsize);
 	    putchar('\n');
 	    lines = gettextlines(elffhdr.e_shnum);

@@ -1,7 +1,7 @@
 /* out.c: Output functions for each type of piece.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
 #include	<stdio.h>
@@ -37,7 +37,7 @@ static char const *cprolog =
 
 /* The output functions that go with each piece type.
  */
-static (*outfunctions[P_COUNT])(pieceinfo const*, void const*);
+static int (*outfunctions[P_COUNT])(pieceinfo const*, void const*);
 
 /* Outputs a section header index.
  */
@@ -308,7 +308,7 @@ static int dynout(pieceinfo const *piece, void const *ptr)
 	    break;
 	}
 	if (!done)
-	    outf("{ %ld }", dyn->d_un.d_val);
+	    outf("{ %ld }", (long)dyn->d_un.d_val);
 	endblock();
     }
     endblock();
@@ -459,7 +459,7 @@ static int phdrsout(pieceinfo const *piece, void const *ptr)
 	else if (!phdr->p_filesz)
 	    outword(phdr->p_memsz);
 	else
-	    outf("%s + 0x%02lX", str, phdr->p_memsz - phdr->p_filesz);
+	    outf("%s + 0x%02LX", str, (long)phdr->p_memsz - phdr->p_filesz);
 	out(getflags(phdr->p_flags, pflags));
 	outword(phdr->p_align);
 	endblock();
@@ -510,11 +510,11 @@ static int shdrsout(pieceinfo const *piece, void const *ptr)
 				|| (int)(shdr->sh_entsize) == ctypes[s].size))
 		sprintf(buf, "sizeof(%s)", ctypes[s].name);
 	    else
-		sprintf(buf, "%ld", shdr->sh_entsize);
+		sprintf(buf, "%u", shdr->sh_entsize);
 	    if (shdr->sh_size % shdr->sh_entsize == 0)
 		outf("%u * %s", shdr->sh_size / shdr->sh_entsize, buf);
 	    else
-		outf("%u * %s + %ld", shdr->sh_size / shdr->sh_entsize,
+		outf("%u * %s + %u", shdr->sh_size / shdr->sh_entsize,
 				      buf, shdr->sh_size % shdr->sh_entsize);
 	} else if (n >= 0)
 	    out(getsizestr(shdr->sh_size, n));
@@ -556,7 +556,7 @@ static int nothingout(pieceinfo const *piece, void const *ptr)
 void beginoutpieces(void)
 {
     pieceinfo  *p;
-    int		i;
+    int		i, f;
 
     out(cprolog);
 
@@ -566,18 +566,17 @@ void beginoutpieces(void)
 		outf("#define %-24s0x%08X\n", addrs[i].name, addrs[i].addr);
 	out("\n");
     }
-    outshdrnames();
+    f = outshdrnames();
 
     outf("typedef struct %s\n{\n", structname);
     for (i = 0, p = pieces ; i < piecenum ; ++i, ++p) {
 	if (p->type == P_EHDR)
 	    outf("    %-20s%s;\n", ctypes[p->type].name, p->name);
-	else if (p->type == P_SHDRTAB)
+	else if (p->type == P_SHDRTAB && f)
 	    outf("    %-20s%s[SHN_COUNT];\n", ctypes[p->type].name, p->name);
-	else {
+	else
 	    outf("    %-20s%s[%d];\n", ctypes[p->type].name, p->name,
 				       p->size / ctypes[p->type].size);
-	}
     }
     outf("} %s;", structname);
     out("\n\n");
@@ -613,7 +612,7 @@ void endoutpieces(void)
 
 /* The actual outfunctions array.
  */
-static (*outfunctions[P_COUNT])(pieceinfo const*, void const*) = {
+static int (*outfunctions[P_COUNT])(pieceinfo const*, void const*) = {
     bytesout,
     bytesout,
     bytesout,

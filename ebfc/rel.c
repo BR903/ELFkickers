@@ -1,9 +1,10 @@
 /* rel.c: parts containing a relocation section.
  *
- * Copyright (C) 1999 by Brian Raiter, under the GNU General Public
- * License. No warranty. See COPYING for details.
+ * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
+ * Public License. No warranty. See COPYING for details.
  */
 
+#include	<stdlib.h>
 #include	<linux/elf.h>
 #include	"elfparts.h"
 #include	"gen.h"

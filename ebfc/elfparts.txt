@@ -73,7 +73,7 @@ directly. The elfpart field named part is a void pointer, and the
 caller should use this field to hold a pointer to memory containing
 the desired contents. Likewise, the size field should contain the
 content's total size. Alternately, if the contents are an array, the
-caller can use in the entsize and count fields instead, which specify
+caller can fill in the entsize and count fields instead, which specify
 the size of each array element and the number of elements
 respectively.
 
