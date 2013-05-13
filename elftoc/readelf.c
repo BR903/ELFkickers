@@ -87,8 +87,8 @@ static int verifyident(void)
 	    return err("not a %s-endian ELF file.", (be ? "big" : "little"));
     }
 
-    if (ident[EI_VERSION] == EV_NONE || ident[EI_DATA] >= EV_NUM)
-	warn("unrecognized ELF header version: %d.", ident[EI_DATA]);
+    if (ident[EI_VERSION] == EV_NONE || ident[EI_VERSION] >= EV_NUM)
+	warn("unrecognized ELF header version: %d.", ident[EI_VERSION]);
 
     return TRUE;
 }
