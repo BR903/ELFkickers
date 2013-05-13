@@ -51,6 +51,6 @@ extern void outstring(char const *str, long length);
 
 /* Returns the number of output characters a string will require.
  */
-extern long outstringsize(char const *str, long length);
+extern long outstringsize(signed char const *str, long length);
 
 #endif
