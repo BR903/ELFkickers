@@ -223,7 +223,7 @@ long outstringsize(char const *str, long length)
     for (i = 0 ; i < length ; ++i) {
 	switch (str[i]) {
 	  case '\0':
-	    if (i < length - 1 && str[i + 1] >= 0 && str[i + 1] <= 7)
+	    if (i < length - 1 && str[i + 1] >= '0' && str[i + 1] <= '7')
 		size += 4;
 	    else
 		size += 2;
@@ -249,8 +249,8 @@ long outstringsize(char const *str, long length)
     return size;
 }
 
-/* Takes a string (not necessarily null-terminated) and outputs it as
- * a literal C string, as a single item.
+/* Takes a string and outputs it as a literal C string, as a single
+ * item.
  */
 void outstring(char const *str, long length)
 {

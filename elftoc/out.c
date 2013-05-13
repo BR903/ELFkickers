@@ -34,7 +34,7 @@ static void outnothing(void const *ptr, long size, int ndx)
  * byte values. The last will be used if the contents contain an
  * excess of non-graphic, non-ASCII characters. Otherwise, one of the
  * first two representations will be selected based on whether or not
- * the contents appear to be null-terminated.
+ * the contents appear to be NUL-terminated.
  */
 static void outbytes(void const *ptr, long size, int ndx)
 {

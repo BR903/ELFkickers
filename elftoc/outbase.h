@@ -45,7 +45,9 @@ extern void outcomment(char const *str);
 
 /* Outputs an arbitrary string in the form of a C string literal, as a
  * single element. Long strings are broken up so as to not exceed the
- * line width.
+ * line width. The string does not have to be NUL-terminated. However,
+ * the function does assume that it is safe to examine the byte at
+ * str[length].
  */
 extern void outstring(char const *str, long length);
 
