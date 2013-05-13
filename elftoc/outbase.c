@@ -215,7 +215,7 @@ static char const *stringchar(char const *ptr)
  * characters that would be required to output those bytes within a
  * literal C string.
  */
-long outstringsize(char const *str, long length)
+long outstringsize(signed char const *str, long length)
 {
     long size, i;
 
