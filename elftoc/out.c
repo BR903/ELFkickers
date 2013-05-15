@@ -52,7 +52,7 @@ static void outbytes(void const *ptr, long size, int ndx)
 	zeroes = 0;
     zeroes &= ~7;
 
-    n = outstringsize((char const*)bytes, size);
+    n = outstringsize((signed char const*)bytes, size);
 
     if (n * 2 > size * 3) {
 	beginblock(TRUE);
