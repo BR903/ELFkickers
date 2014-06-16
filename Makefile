@@ -7,10 +7,12 @@ PROGRAMS = elfls objres rebind sstrip elftoc ebfc infect
 all: $(PROGRAMS)
 
 bin/%:
+	mkdir -p bin
 	$(MAKE) -C$* $*
 	cp $*/$* $@
 
 doc/%.1:
+	mkdir -p doc
 	cp $*/$*.1 $@
 
 elfls: bin/elfls doc/elfls.1
