@@ -501,11 +501,12 @@ static int getlibraries(textline **plines)
     if (i == elffhdr.e_phnum)
 	return 0;
 
-    if (!(dyns = malloc(proghdr[i].p_filesz)))
+    count = elfrw_count_Dyns(proghdr[i].p_filesz);
+    if (!(dyns = malloc(count * sizeof *dyns)))
 	nomem();
     if (fseek(thefile, proghdr[i].p_offset, SEEK_SET))
 	return err("%s: invalid dynamic table offset.", thefilename);
-    count = elfrw_read_size_Dyns(thefile, dyns, proghdr[i].p_filesz);
+    count = elfrw_read_Dyns(thefile, dyns, count);
     if (!count)
 	return 0;
     n = 0;
