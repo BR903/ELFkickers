@@ -59,8 +59,6 @@ extern void elfrw_getsettings(unsigned char *class, unsigned char *data,
  * The plural forms of the functions read an array of ELF structures
  * from the file. The return value indicates the number of structures
  * successfully read.
- *
- * The count forms simply translate a byte count into an array count.
  */
 
 extern int elfrw_read_Half(FILE *fp, Elf64_Half *in);
@@ -92,6 +90,18 @@ extern int elfrw_read_Rels(FILE *fp, Elf64_Rel *in, int count);
 extern int elfrw_read_Relas(FILE *fp, Elf64_Rela *in, int count);
 extern int elfrw_read_Phdrs(FILE *fp, Elf64_Phdr *in, int count);
 extern int elfrw_read_Dyns(FILE *fp, Elf64_Dyn *in, int count);
+
+/*
+ * The count functions. These simply take a file size (in bytes) of a
+ * specific ELF section, and return the number of ELF structures that
+ * it can contain.
+ *
+ * The ELF standard omits storing the number of entries in a couple of
+ * sections, allowing it to be implicitly specified by the section's
+ * file size. This is inconvenient for code using this library, since
+ * ideally it shouldn't need to know the size of the ELF structs in
+ * the file. These function help cover that omission.
+ */
 
 extern int elfrw_count_Syms(int size);
 extern int elfrw_count_Syminfos(int size);
