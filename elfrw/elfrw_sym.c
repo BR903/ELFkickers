@@ -62,17 +62,6 @@ int elfrw_read_Syms(FILE *fp, Elf64_Sym *in, int count)
     return i;
 }
 
-int elfrw_read_size_Syms(FILE *fp, Elf64_Sym *in, int size)
-{
-    int count, i;
-
-    count = size / (is64bit_form() ? sizeof(Elf64_Sym) : sizeof(Elf32_Sym));
-    for (i = 0 ; i < count ; ++i)
-	if (!elfrw_read_Sym(fp, &in[i]))
-	    break;
-    return i;
-}
-
 int elfrw_read_Syminfo(FILE *fp, Elf64_Syminfo *in)
 {
     int r;
@@ -91,18 +80,6 @@ int elfrw_read_Syminfos(FILE *fp, Elf64_Syminfo *in, int count)
 {
     int i;
 
-    for (i = 0 ; i < count ; ++i)
-	if (!elfrw_read_Syminfo(fp, &in[i]))
-	    break;
-    return i;
-}
-
-int elfrw_read_size_Syminfos(FILE *fp, Elf64_Syminfo *in, int size)
-{
-    int count, i;
-
-    count = size / (is64bit_form() ? sizeof(Elf64_Syminfo)
-				   : sizeof(Elf32_Syminfo));
     for (i = 0 ; i < count ; ++i)
 	if (!elfrw_read_Syminfo(fp, &in[i]))
 	    break;
@@ -177,4 +154,15 @@ int elfrw_write_Syminfos(FILE *fp, Elf64_Syminfo const *out, int count)
 	if (!elfrw_write_Syminfo(fp, &out[i]))
 	    break;
     return i;
+}
+
+int elfrw_count_Syms(int size)
+{
+    return size / (is64bit_form() ? sizeof(Elf64_Sym) : sizeof(Elf32_Sym));
+}
+
+int elfrw_count_Syminfos(int size)
+{
+    return size / (is64bit_form() ? sizeof(Elf64_Syminfo)
+				  : sizeof(Elf32_Syminfo));
 }

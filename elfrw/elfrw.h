@@ -60,9 +60,7 @@ extern void elfrw_getsettings(unsigned char *class, unsigned char *data,
  * from the file. The return value indicates the number of structures
  * successfully read.
  *
- * The size forms also read an array of ELF structures, but they take
- * a byte count instead of a structure count as input. The return
- * value indicates the number of structures successfully read.
+ * The count forms simply translate a byte count into an array count.
  */
 
 extern int elfrw_read_Half(FILE *fp, Elf64_Half *in);
@@ -95,9 +93,9 @@ extern int elfrw_read_Relas(FILE *fp, Elf64_Rela *in, int count);
 extern int elfrw_read_Phdrs(FILE *fp, Elf64_Phdr *in, int count);
 extern int elfrw_read_Dyns(FILE *fp, Elf64_Dyn *in, int count);
 
-extern int elfrw_read_size_Syms(FILE *fp, Elf64_Sym *in, int size);
-extern int elfrw_read_size_Syminfos(FILE *fp, Elf64_Syminfo *in, int size);
-extern int elfrw_read_size_Dyns(FILE *fp, Elf64_Dyn *in, int size);
+extern int elfrw_count_Syms(int size);
+extern int elfrw_count_Syminfos(int size);
+extern int elfrw_count_Dyns(int size);
 
 /*
  * The file writing functions. After initialization, the elfrw library

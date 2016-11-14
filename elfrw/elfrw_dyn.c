@@ -49,17 +49,6 @@ int elfrw_read_Dyns(FILE *fp, Elf64_Dyn *in, int count)
     return i;
 }
 
-int elfrw_read_size_Dyns(FILE *fp, Elf64_Dyn *in, int size)
-{
-    int count, i;
-
-    count = size / (is64bit_form() ? sizeof(Elf64_Dyn) : sizeof(Elf32_Dyn));
-    for (i = 0 ; i < count ; ++i)
-	if (!elfrw_read_Dyn(fp, &in[i]))
-	    break;
-    return i;
-}
-
 int elfrw_write_Dyn(FILE *fp, Elf64_Dyn const *out)
 {
     if (is64bit_form()) {
@@ -92,4 +81,9 @@ int elfrw_write_Dyns(FILE *fp, Elf64_Dyn const *out, int count)
 	if (!elfrw_write_Dyn(fp, &out[i]))
 	    break;
     return i;
+}
+
+int elfrw_count_Dyns(int size)
+{
+    return size / (is64bit_form() ? sizeof(Elf64_Dyn) : sizeof(Elf32_Dyn));
 }
