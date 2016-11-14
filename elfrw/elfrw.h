@@ -59,6 +59,10 @@ extern void elfrw_getsettings(unsigned char *class, unsigned char *data,
  * The plural forms of the functions read an array of ELF structures
  * from the file. The return value indicates the number of structures
  * successfully read.
+ *
+ * The size forms also read an array of ELF structures, but they take
+ * a byte count instead of a structure count as input. The return
+ * value indicates the number of structures successfully read.
  */
 
 extern int elfrw_read_Half(FILE *fp, Elf64_Half *in);
@@ -90,6 +94,10 @@ extern int elfrw_read_Rels(FILE *fp, Elf64_Rel *in, int count);
 extern int elfrw_read_Relas(FILE *fp, Elf64_Rela *in, int count);
 extern int elfrw_read_Phdrs(FILE *fp, Elf64_Phdr *in, int count);
 extern int elfrw_read_Dyns(FILE *fp, Elf64_Dyn *in, int count);
+
+extern int elfrw_read_size_Syms(FILE *fp, Elf64_Sym *in, int size);
+extern int elfrw_read_size_Syminfos(FILE *fp, Elf64_Syminfo *in, int size);
+extern int elfrw_read_size_Dyns(FILE *fp, Elf64_Dyn *in, int size);
 
 /*
  * The file writing functions. After initialization, the elfrw library
