@@ -37,6 +37,7 @@ static char const *yowzitch =
     "  -o, --output=FILENAME   Set the name of the object file to create.\n"
     "  -h, --header=FILENAME   Set the name of the C header file to create.\n"
     "  -m, --machine=[32|64]   Set the object file to be 32-bit or 64-bit.\n"
+    "  -R, --reference=OBJFILE Use an existing object file as a template.\n"
     "  -r, --read-only         Make the exported objects const.\n"
     "      --help              Display this help and exit.\n"
     "      --version           Display version information and exit.\n\n"
@@ -49,7 +50,7 @@ static char const *yowzitch =
 /* Version and license information.
  */
 static char const *vourzhon =
-    "objres, version 1.0\n"
+    "objres, version 1.1\n"
     "Copyright (C) 2011 by Brian Raiter <breadbox@muppetlabs.com>\n"
     "License GPLv2+: GNU GPL version 2 or later.\n"
     "This is free software; you are free to change and redistribute it.\n"
@@ -92,6 +93,7 @@ static char const *programname;		/* the name of this program */
 static char const *outputfile = NULL;	/* name of the object file to create */
 static char const *headerfile = NULL;	/* name of the header file to create */
 static FILE *destfile = NULL;		/* the currently-open output file */
+static Elf64_Ehdr refehdr;		/* a reference ELF header to output */
 static int output64;			/* true if building a 64-bit target */
 static int readonly = 0;		/* true if exporting const objects */
 
@@ -186,24 +188,59 @@ static void fcopy(char const *srcfilename)
  * ELF section output functions.
  */
 
+/* Examine a pre-existing object file and extract its ELF header.
+ */
+static void readreferenceheader(char const *filename)
+{
+    FILE *file;
+
+    file = fopen(filename, "rb");
+    if (!file)
+	fail("%s: %s", filename, strerror(errno));
+    if (!elfrw_read_Ehdr(file, &refehdr))
+	fail("%s: %s", filename, strerror(errno));
+    fclose(file);
+    output64 = refehdr.e_ident[EI_CLASS] == ELFCLASS64;
+}
+
+/* Create an empty ELF header template for our object file. By default
+ * an x86 header is created with the same bitness as the current
+ * program.
+ */
+static void makedefaultheader(void)
+{
+    memset(&refehdr, 0, sizeof refehdr);
+    refehdr.e_ident[EI_MAG0] = ELFMAG0;
+    refehdr.e_ident[EI_MAG1] = ELFMAG1;
+    refehdr.e_ident[EI_MAG2] = ELFMAG2;
+    refehdr.e_ident[EI_MAG3] = ELFMAG3;
+    refehdr.e_ident[EI_CLASS] = output64 ? ELFCLASS64 : ELFCLASS32;
+    refehdr.e_ident[EI_DATA] = ELFDATA2LSB;
+    refehdr.e_ident[EI_VERSION] = EV_CURRENT;
+    refehdr.e_ident[EI_OSABI] = ELFOSABI_NONE;
+    refehdr.e_machine = output64 ? EM_X86_64 : EM_386;
+    refehdr.e_version = EV_CURRENT;
+}
+
 /* Output the ELF header for the object file.
  */
 static void outputehdr(void)
 {
     Elf64_Ehdr ehdr;
 
+    ehdr = refehdr;
+    ehdr.e_type = ET_REL;
     memset(&ehdr, 0, sizeof ehdr);
     ehdr.e_ident[EI_MAG0] = ELFMAG0;
     ehdr.e_ident[EI_MAG1] = ELFMAG1;
     ehdr.e_ident[EI_MAG2] = ELFMAG2;
     ehdr.e_ident[EI_MAG3] = ELFMAG3;
-    ehdr.e_ident[EI_CLASS] = output64 ? ELFCLASS64 : ELFCLASS32;
-    ehdr.e_ident[EI_DATA] = ELFDATA2LSB;
-    ehdr.e_ident[EI_VERSION] = EV_CURRENT;
-    ehdr.e_ident[EI_OSABI] = ELFOSABI_NONE;
-    ehdr.e_type = ET_REL;
-    ehdr.e_machine = output64 ? EM_X86_64 : EM_386;
-    ehdr.e_version = EV_CURRENT;
+    ehdr.e_ident[EI_CLASS] = refehdr.e_ident[EI_CLASS];
+    ehdr.e_ident[EI_DATA] = refehdr.e_ident[EI_DATA];
+    ehdr.e_ident[EI_VERSION] = refehdr.e_ident[EI_VERSION];
+    ehdr.e_ident[EI_OSABI] = refehdr.e_ident[EI_OSABI];
+    ehdr.e_machine = refehdr.e_machine;
+    ehdr.e_version = refehdr.e_version;
     ehdr.e_entry = 0;
     ehdr.e_phoff = 0;
     ehdr.e_shoff = piece_shtab->offset;
@@ -600,11 +637,12 @@ static void pickfilenames(void)
  */
 static void readcmdline(int argc, char *argv[])
 {
-    static char const *optstring = "h:m:o:r";
+    static char const *optstring = "h:m:o:rR:";
     static struct option options[] = {
 	{ "header", required_argument, NULL, 'h' },
 	{ "output", required_argument, NULL, 'o' },
 	{ "machine", required_argument, NULL, 'm' },
+	{ "reference", required_argument, NULL, 'R' },
 	{ "read-only", no_argument, NULL, 'r' },
 	{ "help", no_argument, NULL, 'H' },
 	{ "version", no_argument, NULL, 'V' },
@@ -612,11 +650,12 @@ static void readcmdline(int argc, char *argv[])
     };
 
     char const *filename;
+    char const *refobjfilename = NULL;
     char *p;
     int i, n;
 
     programname = argv[0];
-    output64 = sizeof(void*) > 4;
+    output64 = -1;
 
     while ((n = getopt_long(argc, argv, optstring, options, NULL)) != EOF) {
 	switch (n) {
@@ -638,6 +677,9 @@ static void readcmdline(int argc, char *argv[])
 	    else
 		fail("invalid machine word size: must be either 32 or 64");
 	    break;
+	  case 'R':
+	    refobjfilename = optarg;
+	    break;
 	  case 'r':
 	    readonly = 1;
 	    break;
@@ -653,6 +695,16 @@ static void readcmdline(int argc, char *argv[])
     }
     if (optind >= argc)
 	fail("no input files");
+
+    if (refobjfilename) {
+	if (output64 >= 0)
+	    fail("--machine conflicts with --reference; use only one");
+	readreferenceheader(refobjfilename);
+    } else {
+	if (output64 < 0)
+	    output64 = sizeof(void*) > 4;
+	makedefaultheader();
+    }
 
     objectcount = argc - optind;
     objects = allocate(objectcount * sizeof *objects);
