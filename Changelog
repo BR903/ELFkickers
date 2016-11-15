@@ -1,3 +1,20 @@
+* November 2016: version 3.1
+
+	It's been five years since the last version, and a handful of bug
+	fixes (and one feature) have accumulated over that time. A quick
+	rundown:
+
+	- objres: Added --reference option to improve non-x86 support.
+	- elftoc: Make signed chars explicit where needed.
+	- elftoc: Bug fix in ELF header version check.
+	- elfls: Bug fix in handling Elf32 on a 64-bit system.
+	- Various changes to the Makefiles.
+	- Fixes for some typos in the documentation and comments.
+
+	Thanks to German Zyuzin, Lars Lindqvist, Douglas Mencken, Aapo
+	Rantalainen, and Steven Honeyman (in no particular order) for bug
+	reports and patches.
+
 * November 2011: version 3.0a
 
 	This is a very minor update.
