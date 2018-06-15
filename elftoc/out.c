@@ -17,16 +17,13 @@
 #include "outelf32.h"
 #include "out.h"
 
-/* Boolean to display only hexadecimal on data section
- */
-static int data_hexadecimal = FALSE;
+static int forcehex = FALSE;		/* make outbytes() output hex array */
 
-/* Force the output of data sections to be hexadecimal.
- *
+/* Forces outbytes() to always output an array of hexadecimal values.
  */
-void only_hexadecimal(void)
+void forcehexbytes(void)
 {
-    data_hexadecimal = TRUE;
+    forcehex = TRUE;
 }
 
 /* The output function for a piece not actually present in the ELF
@@ -44,9 +41,10 @@ static void outnothing(void const *ptr, long size, int ndx)
  * P_BYTES, or P_STRINGS. The contents are output either as a literal
  * string, an array of character values, or an array of hexadecimal
  * byte values. The last will be used if the contents contain an
- * excess of non-graphic, non-ASCII characters or the flag set.
- * Otherwise, one of the first two representations will be selected
- * based on whether or not the contents appear to be NUL-terminated.
+ * excess of non-graphic, non-ASCII characters, or if the forcehex
+ * flag is set. Otherwise one of the first two representations will
+ * be selected based on whether or not the contents appear to be
+ * NUL-terminated.
  */
 static void outbytes(void const *ptr, long size, int ndx)
 {
@@ -66,7 +64,7 @@ static void outbytes(void const *ptr, long size, int ndx)
 
     n = outstringsize((char const*)bytes, size);
 
-    if ( data_hexadecimal || (n * 2 > size * 3) ) {
+    if (forcehex || n * 2 > size * 3) {
 	beginblock(TRUE);
 	for (i = 0 ; i < size - zeroes ; ++i)
 	    outf("0x%02X", bytes[i]);
