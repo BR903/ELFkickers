@@ -29,6 +29,7 @@ static char const *yowzitch =
     "with the file's contents as its initialized value.\n\n"
     "  -e, --force-end         Force the inclusion of a final _end field.\n"
     "  -E, --exclude-end       Force the _end field to never be included.\n"
+    "  -X, --only-hexadecimal  Force the output of data section to hexadecimal\n"
     "  -m, --allow-misaligned  Ignore alignment problems in fields.\n"
     "  -q, --quiet             Suppress warning messages.\n"
     "  -o, --output=FILE       Write source to FILE instead of stdout.\n"
@@ -41,7 +42,7 @@ static char const *yowzitch =
 
 /* A suffix for command-line parsing errors.
  */
-static char const *helpsuffix = "Try --help for more information.";
+static char const *helpsuffix = "Try --help for more information.\n";
 
 /* The program's version information.
  */
@@ -73,10 +74,11 @@ static int isvalididentifier(char const *name)
  */
 static void parsecmdline(int argc, char *argv[])
 {
-    static char const *optstring = "Eei:mo:qs:v:w:";
+    static char const *optstring = "Eei:mo:qs:v:w:X";
     static struct option options[] = {
 	{ "force-end", no_argument, NULL, 'e' },
 	{ "exclude-end", no_argument, NULL, 'E' },
+	{ "only-hexadecimal", no_argument, NULL, 'X' },
 	{ "allow-misaligned", no_argument, NULL, 'm' },
 	{ "quiet", no_argument, NULL, 'q' },
 	{ "indent", required_argument, NULL, 'i' },
@@ -100,6 +102,7 @@ static void parsecmdline(int argc, char *argv[])
 	switch (n) {
 	  case 'e':	include_end(TRUE);		break;
 	  case 'E':	include_end(FALSE);		break;
+	  case 'X':	only_hexadecimal();		break;
 	  case 'm':	permitmisalignment();		break;
 	  case 'q':	enablewarnings(FALSE);		break;
 	  case 'i':	indent = optarg;		break;

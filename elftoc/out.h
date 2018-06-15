@@ -19,4 +19,8 @@ extern void outtypedblock(int type, long offset, long size, int ndx);
  */
 extern void output(void);
 
+/* Force hexadecimal on data section.
+*/
+extern void only_hexadecimal(void);
+
 #endif
