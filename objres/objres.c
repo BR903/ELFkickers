@@ -456,6 +456,9 @@ static void measureobjects(void)
 	    fail("%s: %s", objects[i].filename, strerror(errno));
 	if (fseek(srcfile, 0, SEEK_END) != -1) {
 	    objects[i].size = ftell(srcfile);
+            p = malloc(objects[i].size);
+            fread(p, 1, objects[i].size, srcfile);
+            objects[i].data = p;
 	    fclose(srcfile);
 	    continue;
 	}
