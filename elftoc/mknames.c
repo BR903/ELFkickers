@@ -177,7 +177,7 @@ static void addnametolist(char *name, int p, int m)
 static int readdefine(char const *line)
 {
     char *name, *infix;
-    int namepos, endpos, size;
+    int namepos, endpos, size, insize;
     char sep;
     int p, m;
 
@@ -194,8 +194,9 @@ static int readdefine(char const *line)
     memcpy(name, line + namepos, size);
     name[size] = '\0';
     for (p = prefixcount - 1 ; p >= 0 ; --p)
-	if (!memcmp(name, prefixes[p].str, prefixes[p].len))
-	    break;
+	if (prefixes[p].len <= size &&
+			!memcmp(name, prefixes[p].str, prefixes[p].len))
+		break;
     if (p < 0) {
 	free(name);
 	return 0;
@@ -203,10 +204,13 @@ static int readdefine(char const *line)
     m = 0;
     if (strcmp(prefixes[p].str, "EM_")) {
 	infix = name + prefixes[p].len;
+	insize = size - prefixes[p].len;
 	for (m = machineidcount - 1 ; m > 0 ; --m) {
-	    if (!memcmp(infix, machineids[m].str, machineids[m].len))
+	    if (machineids[m].len <= insize &&
+			!memcmp(infix, machineids[m].str, machineids[m].len))
 		break;
-	    else if (!memcmp(infix, machineids[m].str2, machineids[m].len2))
+	    else if (machineids[m].len2 <= insize &&
+			!memcmp(infix, machineids[m].str2, machineids[m].len2))
 		break;
 	}
     }
