@@ -1,3 +1,11 @@
+* November 2019: version 3.1a
+
+	Another very minor update. This release includes a couple of bug
+	fixes, and the --force-hex option to elftoc.
+
+	Thanks to Aapo Rantalainen, Agostino Sarubbo, and Lars Lindqvist
+	for bug reports and patches.
+	
 * November 2016: version 3.1
 
 	It's been five years since the last version, and a handful of bug
