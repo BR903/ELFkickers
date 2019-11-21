@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
     if (image[EI_CLASS] != ELFCLASS64)
 	bail(filename, "not a 64-bit ELF file.");
     ehdr = (Elf64_Ehdr*)image;
-    if (ehdr->e_type != ET_EXEC)
+    if (ehdr->e_type != ET_EXEC || ehdr->e_type != ET_DYN)
 	bail(filename, "not an executable file.");
 
     /* Try not to crash on a maliciously malformed binary.
