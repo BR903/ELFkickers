@@ -89,8 +89,8 @@ void setaddressnames(void)
 
     for (i = 0 ; i < addrcount ; ++i) {
 	str = addrs[i].name;
-	while (!isalnum(*str))
-	    ++str;
+        while (*str && !isalnum(*str))
+            ++str;
 	memmove(addrs[i].name + 5, str, strlen(str) + 1);
 	memcpy(addrs[i].name, "ADDR_", 5);
 	for (str = addrs[i].name + 5 ; *str ; ++str)
