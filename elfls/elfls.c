@@ -564,19 +564,23 @@ static void makenumberfmts(void)
     maxsize = 0;
     maxoffset = 0;
     maxaddr = 0;
-    for (i = 0 ; i < elffhdr.e_phnum ; ++i) {
-	if (maxsize < proghdr[i].p_filesz)
-	    maxsize = proghdr[i].p_filesz;
-	if (maxoffset < proghdr[i].p_offset)
-	    maxoffset = proghdr[i].p_offset;
-	if (maxaddr < proghdr[i].p_vaddr)
-	    maxaddr = proghdr[i].p_vaddr;
+    if (proghdrs) {
+        for (i = 0 ; i < elffhdr.e_phnum ; ++i) {
+            if (maxsize < proghdr[i].p_filesz)
+                maxsize = proghdr[i].p_filesz;
+            if (maxoffset < proghdr[i].p_offset)
+                maxoffset = proghdr[i].p_offset;
+            if (maxaddr < proghdr[i].p_vaddr)
+                maxaddr = proghdr[i].p_vaddr;
+        }
     }
-    for (i = 0 ; i < elffhdr.e_shnum ; ++i) {
-	if (maxsize < secthdr[i].sh_size)
-	    maxsize = secthdr[i].sh_size;
-	if (maxoffset < secthdr[i].sh_offset)
-	    maxoffset = secthdr[i].sh_offset;
+    if (secthdrs) {
+        for (i = 0 ; i < elffhdr.e_shnum ; ++i) {
+            if (maxsize < secthdr[i].sh_size)
+                maxsize = secthdr[i].sh_size;
+            if (maxoffset < secthdr[i].sh_offset)
+                maxoffset = secthdr[i].sh_offset;
+        }
     }
     maxsize >>= 20;
     for (i = 6 ; maxsize ; ++i, maxsize >>= 4) ;
