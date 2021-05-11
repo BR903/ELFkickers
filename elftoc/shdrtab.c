@@ -84,6 +84,22 @@ static void enumfinalize(void)
     }
 }
 
+/* Extracts a string from a string table, ensuring that it is safely
+ * NUL-terminated.
+ */
+static char const *getstringptr(char const *strtab, long strsize, long offset)
+{
+    long i;
+
+    if (!strtab || strsize <= 0 || offset < 0 || offset > strsize)
+        return NULL;
+    for (i = offset ; i < strsize ; ++i)
+        if (strtab[i] == '\0')
+            return strtab + offset;
+    warn("string in string table at offset %ld is unterminated.", offset);
+    return NULL;
+}
+
 /* Extract the section header table as an array of Elf64_Shdr. If the
  * section header table is not already in this form, then a translated
  * copy is made.
@@ -100,7 +116,7 @@ static Elf64_Shdr const *copytable(char const *ptr, int count, int entsize)
     shdrs = allocate(count * sizeof *shdrs);
     for (i = 0 ; i < count ; ++i) {
 	if (iself64()) {
-	    if (entsize > (int)(sizeof *shdrs)) {
+	    if (entsize >= (int)(sizeof *shdrs)) {
 		memcpy(shdrs + i, ptr + i * entsize, sizeof *shdrs);
 	    } else {
 		memcpy(shdrs + i, ptr + i * entsize, entsize);
@@ -108,7 +124,7 @@ static Elf64_Shdr const *copytable(char const *ptr, int count, int entsize)
 		       sizeof *shdrs - entsize);
 	    }
 	} else {
-	    if (entsize >= (int)(sizeof *shdrs)) {
+	    if (entsize >= (int)(sizeof sh32)) {
 		memcpy(&sh32, ptr + i * entsize, sizeof sh32);
 	    } else {
 		memcpy(&sh32, ptr + i * entsize, entsize);
@@ -166,7 +182,7 @@ static int selectshtype(Elf64_Shdr const *shdr, char const *name)
  * the section's enum.
  */
 static void dividesection(Elf64_Shdr const *shdrs, int shndx,
-			  char const *strtab)
+			  char const *strtab, long strsize)
 {
     char name[64];
     char const *str;
@@ -203,8 +219,8 @@ static void dividesection(Elf64_Shdr const *shdrs, int shndx,
     }
 
     *name = '\0';
-    if (strtab && strtab[shdrs[shndx].sh_name]) {
-        str = strtab + shdrs[shndx].sh_name;
+    str = getstringptr(strtab, strsize, shdrs[shndx].sh_name);
+    if (str) {
         addenumname(shndx, str);
 	if (type == P_SECTION)
 	    type = selectshtype(shdrs + shndx, str);
@@ -252,7 +268,7 @@ void dividesections(long offset, int count, int entsize, int shstrndx)
     void const *ptr;
     Elf64_Shdr const *shdrs;
     char const *strtab = NULL;
-    long size;
+    long size, strsize;
     int i, n;
 
     if (!offset || !count)
@@ -288,20 +304,20 @@ void dividesections(long offset, int count, int entsize, int shstrndx)
 	if (shstrndx >= count) {
 	    warn("invalid section header string table index: %d.", shstrndx);
 	} else {
-	    size = shdrs[shstrndx].sh_size;
-	    strtab = getptrto(shdrs[shstrndx].sh_offset, &size);
-	    if (size <= 0) {
+	    strsize = shdrs[shstrndx].sh_size;
+	    strtab = getptrto(shdrs[shstrndx].sh_offset, &strsize);
+	    if (strsize <= 0) {
 		strtab = NULL;
 		warn("invalid section header string table offset: %ld.",
 		     shdrs[shstrndx].sh_offset);
 	    } else {
-		setpiecestrtable(n, shdrs[shstrndx].sh_offset, size);
+		setpiecestrtable(n, shdrs[shstrndx].sh_offset, strsize);
 	    }
 	}
     }
 
     for (i = 0 ; i < count ; ++i)
-	dividesection(shdrs, i, strtab);
+	dividesection(shdrs, i, strtab, strsize);
 
     if (sectionenumcount) {
 	enumfinalize();

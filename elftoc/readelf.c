@@ -49,7 +49,7 @@ int iscorefile(void)
  */
 void const *getptrto(long offset, long *size)
 {
-    if (offset >= filesize) {
+    if (offset >= filesize || offset < 0 || *size < 0) {
 	*size = 0;
 	return NULL;
     }
