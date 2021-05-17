@@ -1,3 +1,24 @@
+* May 2021: version 3.2
+
+	It's been a decade since 3.0 was released, wherein I noted my
+	intention to update ebfc to support 64-bit ELF in the near future.
+	ebfc is the only program in ELF Kickers that creates an ELF file
+	from scratch, rather than working with an existing ELF file, and
+	this made it trickier to support both 32-bit and a 64-bit targets
+	in one program. However, at this point in time, it is wholly
+	justifiable to simply drop support for 32-bit targets entirely
+	(particularly with a program like ebfc, which is more intended to
+	be a learning tool than an actual utility). So that's what I did.
+
+	Along the way, I reworked ebfc's code to make it a little clearer
+	and more consistent, and one or two features were added that
+	didn't make it into the original 2.0 version. And, as I did ten
+	years ago with the rest of ELF Kickers, the code has been cleaned
+	up to be warning-free with current compilers.
+
+	Finally, this release contains a handful of fixes to elfls,
+	elftoc, and infect -- mainly for crashes on malformed input files.
+
 * November 2019: version 3.1a
 
 	Another very minor update. This release includes a couple of bug
