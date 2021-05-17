@@ -27,18 +27,18 @@ Most of the compiler's work is very straightforward. The Brainfuck
 commands all translate directly to a few bytes of machine language.
 The real work is mainly in creating the prolog code, which has
 different requirements depending on the type of file being generated.
-There are two "objects", the program and the 30000-byte array.
-Compiling to an executable merely requires that the address of the
-data segment be properly inserted into the prolog code, and the
-address of the text segment is placed in the ELF header's e_entry
-field. Compiling to an object file instead requires that these
-addresses are added to a relocation table, with the function being
-global and the array being local. Finally, compiling to a shared
-library requires that the function be added to the symbol table, and
-the array's address be indirectly computed via the global offset
-table. And, of course, the actual code to use for the prolog depends
-on how the function is being invoked (i.e., from the OS, another
-program, or another part of the same program).
+There are two "objects", the program and the 32k array. Compiling to
+an executable merely requires that the address of the data segment be
+properly inserted into the prolog code, and the address of the text
+segment is placed in the ELF header's e_entry field. Compiling to an
+object file instead requires that these addresses are added to a
+relocation table, with the function being global and the array being
+local. Finally, compiling to a shared library requires that the
+function be added to the symbol table, and the array's address be
+indirectly computed via the global offset table. And, of course, the
+actual code to use for the prolog depends on how the function is being
+invoked (i.e., from the OS, another program, or another part of the
+same program).
 
 The ebfc/bf/ subdirectory contains a few Brainfuck programs, which can
 be used to test the compiler. prime.b was written by Urban Müller;

@@ -1,91 +1,100 @@
 /* dynamic.c: part containing a .dynamic section.
  *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2001,2021 by Brian Raiter, under the GNU General
+ * Public License, version 2. No warranty. See COPYING for details.
  */
 
-#include	<stdlib.h>
-#include	<elf.h>
-#include	"elfparts.h"
-#include	"gen.h"
+#include <stdlib.h>
+#include <elf.h>
+#include "elfparts.h"
+#include "elfpartsi.h"
 
-/* Set up the elfpart structure.
+/* Set the value of an entry in a dynamic section. The entry is added
+ * to the section if it is not already present. The return value is
+ * the index of the entry.
  */
-static void new(elfpart *part)
+static int setdynvalue(elfpart *part, int tag, intptr_t value)
+{
+    Elf64_Dyn *dyn;
+    int n;
+
+    dyn = part->part;
+    for (n = 0 ; n < part->count - 1 ; ++n) {
+	if (dyn[n].d_tag == tag) {
+            dyn[n].d_un.d_val = value;
+            return n;
+        }
+    }
+    return -1;
+}
+
+/* Set up the elfpart structure for a dynamic section.
+ */
+static bool new(elfpart *part)
 {
     part->shtype = SHT_DYNAMIC;
     part->shname = ".dynamic";
     part->flags = PF_R | PF_W;
-    part->entsize = sizeof(Elf32_Dyn);
+    part->entsize = sizeof(Elf64_Dyn);
+    return true;
 }
 
-/* Add the minimally required entries to the dynamic section.
+/* Initialize the dynamic section with the minimally required entries.
  */
-static void init(elfpart *part, blueprint const *bp)
+static bool init(elfpart *part, blueprint const *bp)
 {
-    setdynvalue(part, DT_HASH, 0);
-    setdynvalue(part, DT_SYMTAB, 0);
-    setdynvalue(part, DT_SYMENT, 0);
-    setdynvalue(part, DT_STRTAB, 0);
-    setdynvalue(part, DT_STRSZ, 0);
+    Elf64_Dyn *dyn;
+    int i;
 
-    part->done = TRUE;
+    part->count = 6;
+    dyn = _resizepart(part, part->count * part->entsize);
+    if (!dyn)
+        return false;
+    dyn[0].d_tag = DT_HASH;
+    dyn[1].d_tag = DT_SYMTAB;
+    dyn[2].d_tag = DT_SYMENT;
+    dyn[3].d_tag = DT_STRTAB;
+    dyn[4].d_tag = DT_STRSZ;
+    dyn[5].d_tag = DT_NULL;
+    for (i = 0 ; i < 6 ; ++i)
+        dyn[i].d_un.d_val = 0;
+
+    part->done = true;
+    return true;
     (void)bp;
 }
 
 /* Fill in the values for the required entries.
  */
-static void complete(elfpart *part, blueprint const *bp)
+static bool complete(elfpart *part, blueprint const *bp)
 {
-    elfpart    *p;
-    int		i;
+    elfpart *other;
 
-    for (i = 0, p = bp->parts ; i < bp->partcount ; ++i, ++p)
-	if (p->shtype == SHT_HASH)
+    other = NULL;
+    foreachpart (p0 in bp) {
+	if (p0->shtype == SHT_HASH) {
+            other = p0;
 	    break;
-    if (i == bp->partcount)
-	assert(!".dynamic requires a .hash section");
+        }
+    }
+    if (other) {
+        setdynvalue(part, DT_HASH, other->addr);
+        other = other->link;
+        if (other) {
+            setdynvalue(part, DT_SYMTAB, other->addr);
+            setdynvalue(part, DT_SYMENT, other->entsize);
+            other = other->link;
+            if (other) {
+                setdynvalue(part, DT_STRTAB, other->addr);
+                setdynvalue(part, DT_STRSZ, other->size);
+            }
+        }
+    }
 
-    setdynvalue(part, DT_HASH, p->addr);
-    p = p->link;
-    setdynvalue(part, DT_SYMTAB, p->addr);
-    setdynvalue(part, DT_SYMENT, p->entsize);
-    p = p->link;
-    setdynvalue(part, DT_STRTAB, p->addr);
-    setdynvalue(part, DT_STRSZ, p->size);
-
-    part->done = TRUE;
-    (void)bp;
+    part->done = true;
+    return true;
 }
 
 /* The dynamic elfpart structure.
  */
-elfpart	part_dynamic = { new, init, NULL, complete };
-
-
-/* Sets the value of an entry in a dynamic section. The entry is added
- * to the section if it is not already present. The return value is the
- * index of the entry.
- */
-int setdynvalue(elfpart *part, int tag, int value)
-{
-    Elf32_Dyn  *dyn;
-    int		i;
-
-    assert(part->shtype == SHT_DYNAMIC);
-
-    for (i = 0, dyn = part->part ; i < part->count - 1 ; ++i, ++dyn)
-	if (dyn->d_tag == tag)
-	    break;
-    if (i >= part->count - 1) {
-	part->count = i + 2;
-	part->size = part->count * part->entsize;
-	dyn = palloc(part);
-	dyn += i;
-	dyn->d_tag = tag;
-	dyn[1].d_tag = DT_NULL;
-	dyn[1].d_un.d_val = 0;
-    }
-    dyn->d_un.d_val = value;
-    return i;
-}
+elfpart part_dynamic = { new, init, NULL, complete };

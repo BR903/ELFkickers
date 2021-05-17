@@ -1,124 +1,123 @@
-The basic idea behind the elfparts library is to simplify the process
-of assembling the various components of an ELF file. The "parts" of an
-ELF file that the library deals with are pretty much equivalent to
+The idea behind the elfparts library is to simplify the process of
+assembling the various components of an ELF file. The "parts" of an
+ELF file that the library deals with are largely equivalent to
 sections, excepting a few of the part types (namely, the ELF header,
 the program header table, and the section header table itself).
 
 The basic process entails filling in a blueprint with the description
-of what the file should look like, and then proceeding through four
-stages of gradually building up the actual contents, after which the
+of what the file will look like, and then proceeding through several
+stages stages of building up the actual contents, after which the
 image may be saved to an actual file.
 
-The first piece of data in the blueprint is the filetype field, which
-specifies the type of file to create. This field should be set to
-ET_REL for an object file, ET_EXEC for an executable, or ET_DYN for a
-shared library.
+A blueprint consists of two pieces of data. The first is the filetype
+field, which specifies what kind of file to create -- it should be set
+to ET_REL for an object file, ET_EXEC for an executable, or ET_DYN for
+a shared library. The second is an array of elfpart structures. This
+is the parts list. The library exports a number of elfpart structures,
+covering all the different kinds of structures that appear in ELF
+files.
 
-The other piece of information in a blueprint structure is an array
-of elfpart structures. This is the parts list. The caller should
-allocate the elfpart array, and fill it in with the desired types of
-parts, in the order that they are to appear in the file. (For example,
-the first element in the parts list will always be an ELF header.)
-There can be more than one instance of a given type, presuming that
-the ELF standard permits it.
+A user of the elfparts library should begin by creating a blueprint,
+allocating an array of elfpart structures, and then filling in the
+array with the desired parts, in the order that they will appear in
+the ELF image. Each element should be a copy of one of the elfpart
+structures provided by the library. The first element in the array
+must be a copy of part_ehdr, providing the ELF header. The array can
+include multiple entries of a given type, in cases where it makes
+sense to do so. By copying these elfpart structures into the elements
+of the parts list, the type of each element is determined.
 
-The library exports a number of elfpart structures. By copying these
-structures into the elements of the parts list, the type of each
-element is determined. These structures are empty except for the first
-four fields, which are function pointers. They correspond directly to
-the previously mentioned four stages of building up the file image.
-The caller does not call them directly, however; the library exports
-four functions, each of which move all the parts in the parts list
-through the various stages.
+The exported elfpart structures are initialized to default empty
+values except for the first four fields, which are function pointers.
+They correspond directly to four of the stages of building up the file
+image, and are called implicitly by other library functions.
 
-newparts() is the first function, and is usually called immediately
-after setting up the blueprint. At this stage, each part sets up its
-initial state.
+The purpose of breaking the process up into multiple stages is to give
+the caller many opportunities for adding or inserting their content
+into the various parts. Each stage finalizes one or more aspects of
+blueprint.
 
-After calling newparts(), the caller should "attach" parts that need
-to know about each other. Generally, this means supplying a pointer to
-one part in the link field of another.
+Many ELF sections depend on information provided in other sections,
+and it can be inconvenient to manage the data dependencies between
+them. The library attempts to relieve the caller of the task of
+dependency management, while still leaving room for building many
+different kinds of ELF files.
 
-The following linkages need to be made:
+Once a blueprint has been assembled, the caller should call newparts()
+before doing anything else with it. This function will put each part
+into an initial state consistent with its type.
 
-* A hash needs to be linked to the dynamic symbol table (dynsym).
-* Symbol tables (dynsym or symtab) need to be linked to a string table
-  (dynstr or strtab).
-* A section header string table (shstrtab) needs to be linked to the
-  section header table (shdrtab).
-* Relocation section (rel or rela) need to also be linked to a symbol
-  table (symtab).
+After calling newparts(), the caller can "connect" parts that need to
+know about each other. A number of functions are provided for this
+purpose:
 
-In addition, relocation sections should have their info field set to
-the index of the part (usually one of the progbits types) that they
-apply to.
+* sethashsyms() links a hash section to its dynamic symbol table.
+* setsymstrings() links a symbol table to the string table containing
+  the symbol's names.
+* setshdrstrs() sets the string table associated with the section
+  header table.
+* setrelsyms() links a relocation section to its symbol table.
+* setrelsection() sets the section that a relocation section's fixups
+  are applied to.
 
-Finally, note that if a program header table and/or a section header
-table is included, then the first part in the parts list must be an
-ELF header (which should be the case anyway, but these two parts
-require it).
+(See the commented function declarations in elfparts.h for details.)
+In addition to the above, the caller may choose to remove parts from
+the blueprint at this stage by using removepart().
 
-If the caller wishes, they may remove parts from the parts list at
-this stage by setting the shtype field in the elfpart structure to
-zero.
+initparts() is called after this is finished, and completes the
+initialization of the component parts. After this function has
+returned, the blueprint is initialized and the caller may begin to
+fill in the actual contents of each part.
 
-initparts() is called after this, and completes the initialization of
-the component parts. This is the second stage. After initparts() has
-returned, the caller may begin to fill in the actual contents of each
-part.
+Several parts are relatively free-form in nature. These are the
+progbits parts: part_text, part_data, and part_rodata. These types
+differ only in their permission settings (and their default names). No
+requirements or expectations are imposed on the contents of these
+parts, other than that they occupy memory. (Though there is also a
+part_progbits type that doesn't even do that; its only default purpose
+is to be present in the image.) The elfpart struct has a field named
+part, which is a void pointer. When adding data to one of the progbits
+parts, the caller should set the part field to a buffer containing the
+contents of that part. In addition, there is a field named size which
+should be set to the size of the buffer.
 
-The parts of type progbits (namely, the types text, data, bss, and
-progbits) are not filled in by the library; the caller should do that
-directly. The elfpart field named part is a void pointer, and the
-caller should use this field to hold a pointer to memory containing
-the desired contents. Likewise, the size field should contain the
-content's total size. Alternately, if the contents are an array, the
-caller can fill in the entsize and count fields instead, which specify
-the size of each array element and the number of elements
-respectively.
+The other elfpart types are generally not filled in directly by the
+caller, but are instead built up via library functions:
 
-The progbits type itself sets the flags field to PF_R (i.e.,
-read-only). If the caller wants such a part to include the PF_X
-switch, they should either OR this value in directly, or use the more
-specific text type. Likewise for the data type and the PF_W
-(writeable) flag.
+* addtostrtab() adds a string to a string table.
+* addtosymtab() adds a symbol to a symbol table.
+* addsymbolrel() adds a relocation to a relocation section.
 
-Currently, the elfparts library does not actually support a proper bss
-type (i.e., one whose contents are not added to the file).
+(See the commented functions in elfparts.h for more details.) Some
+elfpart types, such as part_phdrtab and part_shdrtab, generate their
+contents automatically by examining the blueprint, and do not require
+any input from the caller after being added.
 
-The other part types are not filled in directly, but via functions
-supplied by the library. See elfparts.h for documentation on these
-functions.
+fillparts() brings the file image to the next stage, and should
+generally be called after the caller has finished defining the
+content. This function causes the various parts to add any content
+that remains to be generated. After this function returns, the size of
+most parts will be fixed. The caller may continue to change the size
+of parts of type progbits, but not to anything else.
 
-fillparts() brings the file image to the third stage, and should
-generally be called after the caller has finished adding content.
-This function causes the various parts to "fill up"; after this
-function returns, each part will be at the size it will have in the
-completed file.
+When the caller is ready, the measureparts() function is called next.
+This function determines the actual positions in the file image for
+each part, and, if applicable, the addresses for the parts that will
+be loaded into memory. This information is stored in the offset and
+addr fields of the elfpart structure. These values cannot be changed
+after this point.
 
-At this point, the caller may continue to build up the parts of type
-progbits, but the other parts should already contain everything they
-need. 
+Once measureparts() return, the caller may still modify the data
+within the contents of various parts (and in fact various bits of
+information cannot be set until the file offsets and memory addresses
+are determined). But the caller must not change the size of any part
+of the blueprint.
 
-When the caller is finished, the computeoffsets() function should be
-called. This function determines the actual positions in the file
-image for each part, and, if applicable, the addresses for the parts
-that will be loaded into memory. This information is stored in the
-offset and addr fields of the elfpart structure.
+completeparts() brings the image to the final stage. This function
+causes the contents of the various parts to take on their final form.
+After this function returns, the caller may continue to alter data
+within the parts of type progbits, but only if nothing else in the
+file is dependent on the changes.
 
-The computeoffsets() function must be called during this stage. Once
-this function has been called, the caller may still fill in the actual
-contents of various parts (and in fact various bits of information
-cannot be set until the file offsets and memory addresses are known).
-However, the caller must not add or remove anything from the contents:
-the size of each part should remain unchanged.
-
-completeparts() brings the file image to the fourth and final stage.
-This function causes the contents of the various parts to take on
-their final form. After this function returns, the caller may continue
-to make changes within the parts of type progbits, but only if nothing
-else in the file is dependent on the changes.
-
-At any time after this point, the user may call the outputelf()
-function. The completed image will be written to the given filename,
-and the job is done.
+Having reached this point, the caller may then use the outputelf()
+function to output the ELF image to a file.

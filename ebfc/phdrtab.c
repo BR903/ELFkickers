@@ -1,13 +1,13 @@
 /* phdrtab.c: part containing the program header table.
  *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2001,2021 by Brian Raiter, under the GNU General
+ * Public License, version 2. No warranty. See COPYING for details.
  */
 
-#include	<stdlib.h>
-#include	<elf.h>
-#include	"elfparts.h"
-#include	"gen.h"
+#include <stdlib.h>
+#include <elf.h>
+#include "elfparts.h"
+#include "elfpartsi.h"
 
 /* The different possible entries in the program header table.
  */
@@ -15,40 +15,41 @@ enum { PH_TEXT = 0, PH_DATA, PH_DYNAMIC, PH_COUNT };
 
 /* Set up the elfpart structure.
  */
-static void new(elfpart *part)
+static bool new(elfpart *part)
 {
     part->shtype = SHT_OTHER;
     part->flags = PF_R;
-    part->entsize = sizeof(Elf32_Phdr);
+    part->entsize = sizeof(Elf64_Phdr);
+    return true;
 }
 
-/* Note the existence of the program header table in the ELF header.
+/* Record the existence of the program header table in the ELF header.
  */
-static void init(elfpart *part, blueprint const *bp)
+static bool init(elfpart *part, blueprint const *bp)
 {
-    ((Elf32_Ehdr*)bp->parts[0].part)->e_phoff = (Elf32_Off)(long)part;
-
-    part->done = TRUE;
-    (void)bp;
+    _getelfhdr(bp)->e_phoff = (Elf64_Off)(intptr_t)part;
+    part->done = true;
+    return true;
 }
 
 /* Add entries in the program header table for the text segment, the
  * data segment, and (if present) the dynamic section.
  */
-static void fill(elfpart *part, blueprint const *bp)
+static bool fill(elfpart *part, blueprint const *bp)
 {
-    static Elf32_Phdr	blankphdr = { PT_NULL, 0, 0, 0, 0, 0, 0, 0 };
-    Elf32_Phdr	       *phdr;
-    int			n;
+    static Elf64_Phdr const blankphdr = { .p_type = PT_NULL };
+    Elf64_Phdr *phdr;
+    int dynid;
 
     part->count = PH_COUNT;
-    for (n = bp->partcount - 1 ; n > 0 ; --n)
-	if (bp->parts[n].shtype == SHT_DYNAMIC)
+    for (dynid = bp->partcount - 1 ; dynid > 0 ; --dynid)
+	if (bp->parts[dynid].shtype == SHT_DYNAMIC)
 	    break;
-    if (!n)
+    if (!dynid)
 	--part->count;
-    part->size = part->count * part->entsize;
-    phdr = palloc(part);
+    phdr = _resizepart(part, part->count * part->entsize);
+    if (!phdr)
+        return false;
 
     phdr[PH_TEXT] = blankphdr;
     phdr[PH_TEXT].p_type = PT_LOAD;
@@ -60,47 +61,47 @@ static void fill(elfpart *part, blueprint const *bp)
     phdr[PH_DATA].p_flags = PF_R | PF_W;
     phdr[PH_DATA].p_align = 0x1000;
 
-    if (n) {
+    if (dynid) {
 	phdr[PH_DYNAMIC] = blankphdr;
 	phdr[PH_DYNAMIC].p_type = PT_DYNAMIC;
 	phdr[PH_DYNAMIC].p_flags = PF_R | PF_W;
-	phdr[PH_DYNAMIC].p_align = 4;
-	phdr[PH_DYNAMIC].p_offset = (Elf32_Off)(long)(bp->parts + n);
+	phdr[PH_DYNAMIC].p_align = sizeof(Elf64_Addr);
+	phdr[PH_DYNAMIC].p_offset = (Elf64_Off)(intptr_t)(bp->parts + dynid);
     }
 
-    part->done = TRUE;
-    (void)bp;
+    part->done = true;
+    return true;
 }
 
 /* Fill in all the necessary information in the program header table.
  */
-static void complete(elfpart *part, blueprint const *bp)
+static bool complete(elfpart *part, blueprint const *bp)
 {
-    Elf32_Phdr *phdr = part->part;
-    elfpart    *p;
-    int		i, n;
+    Elf64_Phdr *phdr = part->part;
+    elfpart *p0;
+    int i, n;
 
-    phdr[PH_TEXT].p_offset = phdr[PH_DATA].p_offset = 0xFFFFFFFF;
+    phdr[PH_TEXT].p_offset = phdr[PH_DATA].p_offset = ~0;
     phdr[PH_TEXT].p_memsz = phdr[PH_DATA].p_memsz = 0;
-    for (i = 0, p = bp->parts ; i < bp->partcount ; ++i, ++p) {
-	if (!(p->flags & PF_R))
+    for (i = 0, p0 = bp->parts ; i < bp->partcount ; ++i, ++p0) {
+	if (!(p0->flags & PF_R))
 	    continue;
-	n = p->flags & PF_W ? PH_DATA : PH_TEXT;
-	if (phdr[n].p_offset > p->offset) {
-	    phdr[n].p_offset = p->offset;
-	    phdr[n].p_vaddr = p->addr;
+	n = p0->flags & PF_W ? PH_DATA : PH_TEXT;
+	if (phdr[n].p_offset > p0->offset) {
+	    phdr[n].p_offset = p0->offset;
+	    phdr[n].p_vaddr = p0->addr;
 	}
-	if (phdr[n].p_memsz < p->offset + p->size)
-	    phdr[n].p_memsz = p->offset + p->size;
+	if (phdr[n].p_memsz < p0->offset + p0->size)
+	    phdr[n].p_memsz = p0->offset + p0->size;
     }
     phdr[PH_TEXT].p_memsz -= phdr[PH_TEXT].p_offset;
     phdr[PH_DATA].p_memsz -= phdr[PH_DATA].p_offset;
 
     if (part->count > PH_DYNAMIC) {
-	p = (elfpart*)(long)phdr[PH_DYNAMIC].p_offset;
-	phdr[PH_DYNAMIC].p_offset = p->offset;
-	phdr[PH_DYNAMIC].p_vaddr = p->addr;
-	phdr[PH_DYNAMIC].p_memsz = p->size;
+	p0 = (elfpart*)(intptr_t)phdr[PH_DYNAMIC].p_offset;
+	phdr[PH_DYNAMIC].p_offset = p0->offset;
+	phdr[PH_DYNAMIC].p_vaddr = p0->addr;
+	phdr[PH_DYNAMIC].p_memsz = p0->size;
     }
 
     for (i = 0 ; i < part->count ; ++i) {
@@ -108,10 +109,10 @@ static void complete(elfpart *part, blueprint const *bp)
 	phdr[i].p_filesz = phdr[i].p_memsz;
     }
 
-    part->done = TRUE;
-    (void)bp;
+    part->done = true;
+    return true;
 }
 
 /* The program header table elfpart structure.
  */
-elfpart	part_phdrtab = { new, init, fill, complete };
+elfpart part_phdrtab = { new, init, fill, complete };

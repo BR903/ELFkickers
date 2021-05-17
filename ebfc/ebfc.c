@@ -1,112 +1,122 @@
 /* ebfc.c: The central module.
  *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2001,2021 by Brian Raiter, under the GNU General
+ * Public License, version 2. No warranty. See COPYING for details.
  */
 
-#include	<stdio.h>
-#include	<stdlib.h>
-#include	<string.h>
-#include	<ctype.h>
-#include	<errno.h>
-#include	<stdarg.h>
-#include	<unistd.h>
-#include	<fcntl.h>
-#include	<sys/stat.h>
-#include	<getopt.h>
-#include	<elf.h>
-#include	"elfparts.h"
-#include	"ebfc.h"
-
-/* Allocates memory (or aborts).
- */
-#define	xalloc(p, n) \
-    (((p) = realloc((p), (n))) ? (p) : (fputs("Out of memory!\n", stderr), \
-					exit(ENOMEM), NULL))
-
-/* Allocates memory for a string and forces null-termination.
- */
-#define	xstrndup(d, s, n) \
-    (((char*)memcpy(xalloc((d), (n) + 1), (s), (n)))[n] = '\0')
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <string.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <getopt.h>
+#include <elf.h>
+#include "elfparts.h"
+#include "ebfc.h"
 
 /* The online help text.
  */
 static char const      *yowzitch =
-	"Usage: ebfc [-hvlxcsz] [-o OBJFILE] [-i SRCNAME] [-f FUNCTION] FILE\n"
-	"   -h  Display this help\n"
-	"   -v  Display version information\n"
-	"   -x  Compile to a standalone executable\n"
-	"   -l  Compile to a shared library\n"
-	"   -c  Compile to an object file (the default)\n"
-	"   -xc Compile to an object file for a standalone executable\n"
-	"   -lc Compile to an object file for a shared library\n"
-	"   -s  Smaller output: omit extra features in the object file\n"
-	"   -z  Read a compressed source file\n"
-	"   -o  Output the object code to OBJFILE\n"
-	"   -f  Set the program's function name to FUNCTION\n"
-	"   -i  Record the source filename as being SRCNAME\n";
+    "Usage: ebfc [OPTIONS] FILENAME\n"
+    "Compiles Brainfuck source code to an ELF target.\n\n"
+    "  -x                    Generate a standalone executable file.\n"
+    "  -l                    Generate a shared library.\n"
+    "  -c                    Generate the object file for a function.\n"
+    "  -xc                   Generate the object file for an executable.\n"
+    "  -lc                   Generate the object file for a shared library.\n"
+    "  -a, --arg             Modify the function to take a buffer argument.\n"
+    "  -z, --compressed      Read the input file as compressed BF source.\n"
+    "  -o, --output=FILE     Write the output to FILE.\n"
+    "  -f, --function=NAME   Use NAME as the library's exported function.\n"
+    "  -i, --input=NAME      Record the source filename as NAME.\n"
+    "  -s, --strip           Omit non-required data from the output file.\n"
+    "      --help            Display this help and exit.\n"
+    "      --version         Display version information and exit.\n";
 
 /* The version text.
  */
-static char const      *vourzhon =
-	"ebfc, version 1.1: Copyright (C) 1999 by Brian Raiter\n";
-
-/* The contents of the .comment section.
- */
-static char const	comment[] = "\0ELF Brainfuck Compiler 1.0";
+static char const *vourzhon =
+    "ebfc, version 2.0\n"
+    "Copyright (C) 1999,2021 by Brian Raiter <breadbox@muppetlabs.com>\n"
+    "License GPLv2+: GNU GPL version 2 or later.\n"
+    "This is free software; you are free to change and redistribute it.\n"
+    "There is NO WARRANTY, to the extent permitted by law.\n";
 
 /* The full collection of elfparts used by this program. This list
  * must match up with the enum that appears in the header file.
  */
-static elfpart const   *parttable[P_COUNT] = {
-    &part_ehdr, &part_phdrtab, &part_hash, &part_dynsym, &part_dynstr,
-    &part_text, &part_rel, &part_got, &part_dynamic, &part_data,
-    &part_shstrtab, &part_progbits, &part_symtab, &part_strtab, &part_shdrtab
+static elfpart const *parttable[P_COUNT] = {
+    [P_EHDR]     = &part_ehdr,
+    [P_PHDRTAB]  = &part_phdrtab,
+    [P_HASH]     = &part_hash,
+    [P_DYNSYM]   = &part_dynsym,
+    [P_DYNSTR]   = &part_dynstr,
+    [P_TEXT]     = &part_text,
+    [P_REL]      = &part_rel,
+    [P_GOT]      = &part_got,
+    [P_DYNAMIC]  = &part_dynamic,
+    [P_DATA]     = &part_data,
+    [P_COMMENT]  = &part_progbits,
+    [P_SHSTRTAB] = &part_shstrtab,
+    [P_SYMTAB]   = &part_symtab,
+    [P_STRTAB]   = &part_strtab,
+    [P_SHDRTAB]  = &part_shdrtab,
 };
 
-/* Masks indicating which elfparts are used with which file types.
+/* Lists indicating which elfparts are included in which file types.
  */
-static char		partlists[][P_COUNT] = {
-    { 0 },
-    { 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1 },	/* ET_REL */
-    { 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0 },	/* ET_EXEC */
-    { 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1 }	/* ET_DYN */
+static int partlists[][P_COUNT] = {
+    [ET_EXEC] = { P_PHDRTAB, P_TEXT, P_DATA, P_COMMENT,
+                  P_SHSTRTAB, P_SHDRTAB },
+    [ET_REL] =  { P_TEXT, P_REL, P_DATA, P_COMMENT,
+                  P_SHSTRTAB, P_SYMTAB, P_STRTAB, P_SHDRTAB },
+    [ET_DYN] =  { P_PHDRTAB, P_HASH, P_DYNSYM, P_DYNSTR, P_TEXT,
+                  P_GOT, P_DYNAMIC, P_DATA, P_COMMENT, P_SHSTRTAB, P_SHDRTAB }
 };
 
 /* The name of this program, taken from argv[0]. Used for error messages.
  */
-static char const      *thisprog;
+static char const *thisprog;
 
 /* The name of the currently open file. Used for error messages.
  */
-static char const      *thefilename;
+static char const *thefilename;
 
 /* The filename to insert in the object file as the source filename.
  */
-static char	       *srcfilename = NULL;
+static char *srcfilename = NULL;
 
 /* The filename to receive the object code.
  */
-static char	       *outfilename = NULL;
+static char *outfilename = NULL;
 
 /* The name of the function to put the Brainfuck program under.
  */
-static char	       *functionname = NULL;
+static char *functionname = NULL;
 
-/* Whether or not to add extra, unnecessary items to the object file.
+/* Whether or not to add extra items to the object file.
  */
-static int		addextras = TRUE;
+static bool addextras = true;
 
-/* Outputs a formatted error message on stderr. If fmt is NULL, then
- * uses the error message supplied by perror(). Returns false.
+/*
+ * General-purpose functions.
  */
-int err(char const *fmt, ...)
+
+/* Output a formatted error message on stderr, prefixed by the input
+ * filename. If fmt is NULL, then the error message supplied by
+ * perror() is used. Returns false.
+ */
+bool err(char const *fmt, ...)
 {
-    va_list	args;
+    va_list args;
 
     if (!fmt) {
 	perror(thefilename);
-	return FALSE;
+	return false;
     }
 
     fprintf(stderr, "%s: ", thefilename ? thefilename : thisprog);
@@ -114,204 +124,281 @@ int err(char const *fmt, ...)
     vfprintf(stderr, fmt, args);
     fputc('\n', stderr);
     va_end(args);
-    return FALSE;
+    return false;
 }
 
-/* Derives the names of the source file, the object file, and the
- * function from the pathname of the actual source file, if any of
- * these were not already specified by the user.
+/* A wrapper around malloc() that dies if memory is unavailable.
  */
-static int setnames(blueprint const *bp, int codetype, char const *filename)
+static void *allocate(size_t size)
+{
+    void *p = malloc(size);
+    if (!p) {
+        fputs("memory allocation failed\n", stderr);
+        exit(EXIT_FAILURE);
+    }
+    return p;
+}
+
+/* A version of strdup() that dies if memory is unavailable.
+ */
+static char *strallocate(char const *str)
+{
+    size_t size;
+    if (!str)
+        return NULL;
+    size = strlen(str) + 1;
+    return memcpy(allocate(size), str, size);
+}
+
+/*
+ * The functions that build the ELF file.
+ */
+
+/* Initialize connections between parts of the object file.
+ */
+static void connectparts(blueprint *bp)
+{
+    if (partispresent(&bp->parts[P_HASH]))
+        sethashsyms(bp, P_HASH, P_DYNSYM);
+    if (partispresent(&bp->parts[P_DYNSYM]))
+        setsymstrings(bp, P_DYNSYM, P_DYNSTR);
+    if (partispresent(&bp->parts[P_SYMTAB]))
+        setsymstrings(bp, P_SYMTAB, P_STRTAB);
+    if (partispresent(&bp->parts[P_REL])) {
+        setrelsection(bp, P_REL, P_TEXT);
+        setrelsyms(bp, P_REL, P_SYMTAB);
+    }
+    if (partispresent(&bp->parts[P_SHDRTAB]) &&
+                partispresent(&bp->parts[P_SHSTRTAB]))
+        setshdrstrs(bp, P_SHDRTAB, P_SHSTRTAB);
+}
+
+/* Set the names of the source file, the object file, and the
+ * function. Names that were not set explicitly by the user are
+ * derived from the name of the input file.
+ */
+static bool setnames(blueprint const *bp, int codetype, char const *filename)
 {
     char const *base;
-    int		n, i;
+    int len, i;
 
+    if (!filename || !filename[0])
+        return false;
     base = strrchr(filename, '/');
-    base = base ? base + 1 : filename;
-    n = strlen(base);
+    if (base)
+        ++base;
+    else
+        base = filename;
+    len = strlen(base);
+    if (!len)
+        return false;
 
     if (!srcfilename)
-	xstrndup(srcfilename, base, n);
+        srcfilename = strallocate(base);
 
-    if (base[n - 2] == '.' && base[n - 1] == 'b' && n > 2)
-	n -= 2;
+    if (len > 2 && !memcmp(base + len - 2, ".b", 2))
+	len -= 2;
+    else if (len > 3 && !memcmp(base + len - 3, ".bf", 3))
+        len -= 3;
 
     if (!outfilename) {
 	if (bp->filetype == ET_REL) {
-	    xalloc(outfilename, n + 3);
-	    sprintf(outfilename, "%*.*s.o", n, n, base);
+            outfilename = allocate(len + 3);
+            sprintf(outfilename, "%*.*s.o", len, len, base);
 	} else if (bp->filetype == ET_DYN) {
-	    xalloc(outfilename, n + 7);
-	    sprintf(outfilename, "lib%*.*s.so", n, n, base);
-	} else if (bp->filetype == ET_EXEC) {
-	    if (!base[n])
-		xstrndup(outfilename, "a.out", sizeof "a.out");
-	    else
-		xstrndup(outfilename, base, n);
-	} else
-	    xstrndup(outfilename, "a.out", sizeof "a.out");
+            outfilename = allocate(len + 7);
+	    sprintf(outfilename, "lib%*.*s.so", len, len, base);
+        } else if (bp->filetype == ET_EXEC && base[len] != '\0') {
+            outfilename = allocate(len + 1);
+            memcpy(outfilename, base, len);
+            outfilename[len] = '\0';
+        } else {
+            outfilename = strallocate("a.out");
+        }
     }
 
     if (!functionname) {
-	if (codetype == ET_EXEC)
-	    xstrndup(functionname, "_start", 6);
-	else {
-	    xstrndup(functionname, base, n);
-	    for (i = 0 ; i < n ; ++i)
+	if (codetype == CODE_EXEC) {
+            functionname = strallocate("_start");
+	} else {
+            functionname = allocate(len + 1);
+            memcpy(functionname, base, len);
+            functionname[len] = '\0';
+            if (!isalpha(functionname[0]))
+                functionname[0] = '_';
+	    for (i = 1 ; i < len ; ++i)
 		if (!isalnum(functionname[i]))
 		    functionname[i] = '_';
 	}
     }
-    if (!isalpha(*functionname) && *functionname != '_') {
-	err("`%s' is not a valid symbol name", functionname);
-	return FALSE;
-    }
 
-    return TRUE;
+    return true;
 }
 
-/* Creates and initializes the various parts of the object file.
+/* Fill in the comment and text sections of the blueprint.
  */
-static int createparts(blueprint const *bp)
+static bool populateparts(blueprint *bp, int codetype,
+                          char const *filename, int compressed)
 {
-    newparts(bp);
+    static char const comment[] = "\0ELF Brainfuck Compiler 2.0";
 
-    if (bp->parts[P_HASH].shtype)
-	bp->parts[P_HASH].link = &bp->parts[P_DYNSYM];
-    if (bp->parts[P_DYNSYM].shtype)
-	bp->parts[P_DYNSYM].link = &bp->parts[P_DYNSTR];
-    if (bp->parts[P_REL].shtype) {
-	bp->parts[P_REL].link = &bp->parts[P_SYMTAB];
-	bp->parts[P_REL].info = P_TEXT;
-    }
-    if (bp->parts[P_SYMTAB].shtype)
-	bp->parts[P_SYMTAB].link = &bp->parts[P_STRTAB];
-    if (bp->parts[P_SHDRTAB].shtype && bp->parts[P_SHSTRTAB].shtype)
-	bp->parts[P_SHDRTAB].link = &bp->parts[P_SHSTRTAB];
-
-    initparts(bp);
-
-    return TRUE;
-}
-
-/* Creates the contents of the various parts of the object file.
- */
-static int populateparts(blueprint const *bp, int codetype,
-			 char const *filename, int compressed)
-{
     if (addextras) {
-	if (bp->parts[P_COMMENT].shtype) {
+        if (partispresent(&bp->parts[P_COMMENT])) {
 	    bp->parts[P_COMMENT].shname = ".comment";
 	    bp->parts[P_COMMENT].size = sizeof comment;
-	    xstrndup(bp->parts[P_COMMENT].part, comment, sizeof comment);
+            bp->parts[P_COMMENT].part = allocate(sizeof comment);
+            memcpy(bp->parts[P_COMMENT].part, comment, sizeof comment);
 	}
-	if (bp->parts[P_SYMTAB].shtype)
-	    addtosymtab(bp->parts + P_SYMTAB, srcfilename,
+        if (partispresent(&bp->parts[P_SYMTAB]))
+	    addtosymtab(&bp->parts[P_SYMTAB], srcfilename,
 			STB_LOCAL, STT_FILE, SHN_ABS);
+    } else {
+        if (bp->filetype == ET_EXEC) {
+            removepart(&bp->parts[P_SHDRTAB]);
+            removepart(&bp->parts[P_SHSTRTAB]);
+        }
     }
 
     thefilename = filename;
-    if (!translatebrainfuck(filename, bp, codetype, functionname, compressed))
-	return FALSE;
+    if (!compilebrainfuck(filename, bp, codetype, functionname, compressed))
+	return false;
     thefilename = NULL;
 
-    fillparts(bp);
-    if (!computeoffsets(bp))
-	return FALSE;
-
-    createfixups(bp, codetype, functionname);
-
-    completeparts(bp);
-
-    return TRUE;
+    return true;
 }
 
-/* The top-level compiling function. Runs through the stages of
- * creating the object file image, compiling the source code, and
- * writing out the file.
+/* The top-level compiling function. Work through the stages of
+ * creating the ELF file image, compiling the source code, and writing
+ * out the file. The output file also has the executable bits in its
+ * mode set accordingly.
  */
-static int compile(blueprint *bp, int codetype,
-		   char const *filename, int compressed)
+static bool compile(blueprint *bp, int codetype,
+                    char const *filename, int compressed)
 {
     struct stat	s;
 
-    if (!createparts(bp))
-	return FALSE;
+    enforcevalidation(true);
+
+    newparts(bp);
+
+    connectparts(bp);
+    initparts(bp);
+
     if (!setnames(bp, codetype, filename))
-	return FALSE;
+	return false;
     if (!populateparts(bp, codetype, filename, compressed))
-	return FALSE;
+	return false;
+
+    fillparts(bp);
+    measureparts(bp);
+
+    if (!createfixups(bp, codetype, functionname))
+        return false;
+
+    completeparts(bp);
 
     thefilename = outfilename;
     if (!outputelf(bp, outfilename)) {
 	err(NULL);
 	remove(outfilename);
-	return FALSE;
+	return false;
     }
-    if (!stat(outfilename, &s)) {
+    if (stat(outfilename, &s) == 0) {
 	if (bp->filetype == ET_EXEC)
 	    s.st_mode |= S_IXUSR | S_IXGRP | S_IXOTH;
 	else
 	    s.st_mode &= ~(S_IXUSR | S_IXGRP | S_IXOTH);
 	chmod(outfilename, s.st_mode);
-    } else
+    } else {
 	err(NULL);
+    }
     thefilename = NULL;
 
-    return TRUE;
+    return true;
 }
 
-/* main() sets up the blueprint as per the command-line options and
- * begins the compiling process.
+/* main() uses the command-line options to set up the correct
+ * blueprint, and then kicks off the compilation process.
  */
 int main(int argc, char *argv[])
 {
-    blueprint	b = { 0 };
-    int		codetype = 0;
-    int		compressed = FALSE;
-    int		n;
+    static char const *optstring = "acf:i:lo:sxz";
+    static struct option const options[] = {
+        { "output", required_argument, NULL, 'o' },
+        { "input", required_argument, NULL, 'i' },
+        { "function", required_argument, NULL, 'f' },
+        { "arg", no_argument, NULL, 'a' },
+        { "strip", no_argument, NULL, 's' },
+        { "help", no_argument, NULL, 'H' },
+        { "version", no_argument, NULL, 'V' },
+        { 0, 0, 0, 0 }
+    };
+
+    blueprint b;
+    char const *filename;
+    bool buildobjfile, bufferarg, compressed;
+    int codetype;
+    int ch, i;
 
     thisprog = argv[0];
-
-    while ((n = getopt(argc, argv, "cf:hi:lo:svxz")) != EOF) {
-	switch (n) {
-	  case 'z':	compressed = TRUE;				break;
-	  case 'c':	b.filetype = ET_REL;				break;
-	  case 'x':	codetype = ET_EXEC;				break;
-	  case 'l':	codetype = ET_DYN;				break;
-	  case 's':	addextras = FALSE;				break;
-	  case 'f':	xstrndup(functionname, optarg, strlen(optarg));	break;
-	  case 'i':	xstrndup(srcfilename, optarg, strlen(optarg));	break;
-	  case 'o':	xstrndup(outfilename, optarg, strlen(optarg));	break;
-	  case 'h':	fputs(yowzitch, stdout);	return EXIT_SUCCESS;
-	  case 'v':	fputs(vourzhon, stdout);	return EXIT_SUCCESS;
-	  default:	fputs(yowzitch, stderr);	return EXIT_FAILURE;
+    b.filetype = ET_NONE;
+    codetype = CODE_NONE;
+    buildobjfile = false;
+    bufferarg = false;
+    compressed = false;
+    while ((ch = getopt_long(argc, argv, optstring, options, NULL)) != EOF) {
+	switch (ch) {
+	  case 'c':	buildobjfile = true;			break;
+	  case 'x':	codetype = CODE_EXEC;			break;
+	  case 'l':	codetype = CODE_SOFUNC;			break;
+	  case 'z':	compressed = true;			break;
+	  case 'a':	bufferarg = true;			break;
+	  case 's':	addextras = false;			break;
+	  case 'f':	functionname = strallocate(optarg);	break;
+          case 'i':	srcfilename = strallocate(optarg);	break;
+	  case 'o':	outfilename = strallocate(optarg);	break;
+	  case 'H':	fputs(yowzitch, stdout);		return 0;
+	  case 'V':	fputs(vourzhon, stdout);		return 0;
+	  default:
+            err("(try \"--help\" for more information)");
+            exit(EXIT_FAILURE);
 	}
     }
+    if (optind + 1 != argc) {
+	err(optind == argc ? "no source file specified."
+			   : "multiple source files specified.");
+	exit(EXIT_FAILURE);
+    }
+    filename = argv[optind];
 
-    if (!b.filetype) {
+    if (buildobjfile) {
+        if (!codetype)
+            codetype = CODE_FUNC;
+        b.filetype = ET_REL;
+    } else {
 	if (!codetype)
-	    codetype = ET_EXEC;
-	b.filetype = codetype;
-    } else if (!codetype)
-	codetype = ET_REL;
+	    codetype = CODE_EXEC;
+	b.filetype = codetype == CODE_EXEC ? ET_EXEC : ET_DYN;
+    }
+    if (bufferarg) {
+        if (codetype == CODE_EXEC) {
+            err("executable file format cannot take an argument");
+            exit(EXIT_FAILURE);
+        }
+        codetype = CODE_FUNCARG;
+    }
+
     b.partcount = P_COUNT;
-    xalloc(b.parts, P_COUNT * sizeof *b.parts);
-    for (n = 0 ; n < P_COUNT ; ++n) {
-	if (partlists[b.filetype][n])
-	    b.parts[n] = *parttable[n];
-	else
-	    b.parts[n].shtype = 0;
+    b.parts = allocate(P_COUNT * sizeof *b.parts);
+    memset(b.parts, 0, b.partcount * sizeof *b.parts);
+    b.parts[0] = *parttable[P_EHDR];
+    for (i = 0 ; partlists[b.filetype][i] ; ++i) {
+        int type = partlists[b.filetype][i];
+        b.parts[type] = *parttable[type];
     }
     if (!addextras)
-	b.parts[P_COMMENT].shtype = 0;
+        removepart(&b.parts[P_COMMENT]);
 
-    if (optind + 1 != argc) {
-	err(optind == argc ? "no input file specified."
-			   : "multiple input files specified.");
-	return EXIT_FAILURE;
-    }
-
-    return compile(&b, codetype, argv[optind], compressed) ? EXIT_SUCCESS
-							   : EXIT_FAILURE;
+    return compile(&b, codetype, filename, compressed) ? EXIT_SUCCESS
+						       : EXIT_FAILURE;
 }

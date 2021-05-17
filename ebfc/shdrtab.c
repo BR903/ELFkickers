@@ -1,126 +1,133 @@
 /* shdrtab.c: part containing the section header table.
  *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2001,2021 by Brian Raiter, under the GNU General
+ * Public License, version 2. No warranty. See COPYING for details.
  */
 
-#include	<stdlib.h>
-#include	<elf.h>
-#include	"elfparts.h"
-#include	"gen.h"
+#include <stdlib.h>
+#include <elf.h>
+#include "elfparts.h"
+#include "elfpartsi.h"
 
 /* Set up the elfpart structure.
  */
-static void new(elfpart *part)
+static bool new(elfpart *part)
 {
     part->shtype = SHT_OTHER;
-    part->entsize = sizeof(Elf32_Shdr);
+    part->entsize = sizeof(Elf64_Shdr);
+    return true;
 }
 
 /* Create a blank section header table with enough entries for all the
  * appropriate parts in the blueprint.
  */
-static void init(elfpart *part, blueprint const *bp)
+static bool init(elfpart *part, blueprint const *bp)
 {
-    static Elf32_Shdr	blankshdr = { 0, SHT_NULL, 0, 0, 0, 0, 0, 0, 0, 0 };
-    Elf32_Shdr	       *shdr;
-    int			i;
+    static Elf64_Shdr const blankshdr = { .sh_type = SHT_NULL };
+    Elf64_Shdr *shdr;
+    int i;
 
-    ((Elf32_Ehdr*)bp->parts[0].part)->e_shoff = (Elf32_Off)(long)part;
+    foreachpart (p0 in bp)
+        if (_partissection(p0) && !p0->done)
+            return true;
 
-    for (i = 0 ; i < bp->partcount ; ++i)
-	if (bp->parts[i].shtype > 0 && !bp->parts[i].done)
-	    return;
-
+    _getelfhdr(bp)->e_shoff = (Elf64_Off)(intptr_t)part;
     part->count = 1;
-    for (i = 0 ; i < bp->partcount ; ++i) {
-	if (bp->parts[i].shtype <= 0)
-	    continue;
-	++part->count;
-    }
+    foreachpart (p0 in bp)
+        if (_partissection(p0))
+            ++part->count;
 
-    part->size = part->count * part->entsize;
-    shdr = palloc(part);
+    shdr = _resizepart(part, part->count * part->entsize);
+    if (!shdr)
+        return false;
     for (i = 0 ; i < part->count ; ++i)
 	shdr[i] = blankshdr;
 
-    part->done = TRUE;
+    part->done = true;
+    return true;
 }
 
 /* Add the section names to the section header string table, if one is
  * present.
  */
-static void fill(elfpart *part, blueprint const *bp)
+static bool fill(elfpart *part, blueprint const *bp)
 {
-    Elf32_Shdr *shdr = part->part;
-    int		i, n;
+    Elf64_Shdr *shdr = part->part;
+    int n;
 
     if (part->link) {
-	for (i = n = 0 ; i < bp->partcount ; ++i) {
-	    if (bp->parts[i].shtype <= 0)
-		continue;
+        n = 1;
+        foreachpart (p0 in bp) {
+            if (p0->shtype <= 0)
+                continue;
+	    if (p0->shname)
+		shdr[n].sh_name = addtostrtab(part->link, p0->shname);
+	    if (p0 == part->link)
+                _getelfhdr(bp)->e_shstrndx = n;
 	    ++n;
-	    if (bp->parts[i].shname)
-		shdr[n].sh_name = addtostrtab(part->link, bp->parts[i].shname);
-	    if (bp->parts + i == part->link)
-		((Elf32_Ehdr*)bp->parts[0].part)->e_shstrndx = n;
 	}
 	part->link = NULL;
+        if (part->count != n) {
+            part->count = n;
+            _resizepart(part, part->count * part->entsize);
+        }
     }
 
-    part->done = TRUE;
+    part->done = true;
+    return true;
 }
 
 /* Fill in the section header table, using the information from the
  * parts list in the blueprint.
  */
-static void complete(elfpart *part, blueprint const *bp)
+static bool complete(elfpart *part, blueprint const *bp)
 {
-    Elf32_Shdr *shdr;
-    elfpart    *p;
-    int		i, n;
+    Elf64_Shdr *shdr;
+    int n;
 
-    for (i = 0 ; i < bp->partcount ; ++i)
-	if (bp->parts[i].shtype > 0 && !bp->parts[i].done)
-	    return;
+    foreachpart (p0 in bp)
+        if (_partissection(p0) && !p0->done)
+            return true;
 
     shdr = part->part;
-    for (i = 0, p = bp->parts ; i < bp->partcount ; ++i, ++p) {
-	if (p->shtype <= 0)
+    foreachpart(p0 in bp) {
+	if (p0->shtype <= 0)
 	    continue;
 	++shdr;
-	shdr->sh_type = p->shtype;
-	shdr->sh_offset = p->offset;
-	shdr->sh_size = p->size;
-	shdr->sh_addr = p->addr;
-	shdr->sh_entsize = p->entsize;
-	if (p->flags) {
-	    shdr->sh_addralign = 4;
+	shdr->sh_type = p0->shtype;
+	shdr->sh_offset = p0->offset;
+	shdr->sh_size = p0->size;
+	shdr->sh_addr = p0->addr;
+	shdr->sh_entsize = p0->entsize;
+	if (p0->flags) {
+	    shdr->sh_addralign = sizeof(Elf64_Addr);
 	    shdr->sh_flags = SHF_ALLOC;
-	    if (p->flags & PF_W)
+	    if (p0->flags & PF_W)
 		shdr->sh_flags |= SHF_WRITE;
-	    if (p->flags & PF_X) {
+	    if (p0->flags & PF_X) {
 		shdr->sh_flags |= SHF_EXECINSTR;
 		shdr->sh_addralign = 16;
 	    }
-	} else if (shdr->sh_entsize)
-	    shdr->sh_addralign = 4;
-	if (p->info)
-	    shdr->sh_info = p->info;
-	if (p->link) {
+	} else if (shdr->sh_entsize) {
+	    shdr->sh_addralign = sizeof(Elf64_Addr);
+        }
+	if (p0->info)
+	    shdr->sh_info = p0->info;
+	if (p0->link) {
 	    shdr->sh_link = 1;
 	    for (n = 0 ; n < bp->partcount ; ++n) {
-		if (bp->parts + n == p->link)
+		if (bp->parts + n == p0->link)
 		    break;
-		if (bp->parts[n].shtype > 0)
+                if (_partissection(&bp->parts[n]))
 		    ++shdr->sh_link;
 	    }
 	}
     }
 
-    part->done = TRUE;
+    part->done = true;
+    return true;
 }
 
 /* The section header table elfpart structure.
  */
-elfpart	part_shdrtab = { new, init, fill, complete };
+elfpart part_shdrtab = { new, init, fill, complete };

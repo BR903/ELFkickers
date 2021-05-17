@@ -21,7 +21,7 @@ ebfc/ehdr.c
 ebfc/elfparts.c
 ebfc/elfparts.h
 ebfc/elfparts.txt
-ebfc/gen.h
+ebfc/elfpartsi.h
 ebfc/got.c
 ebfc/hash.c
 ebfc/phdrtab.c
@@ -77,10 +77,10 @@ elftoc/readelf.c
 elftoc/readelf.h
 elftoc/shdrtab.c
 elftoc/shdrtab.h
-infect/infect.1
-infect/infect.c
 infect/Makefile
 infect/README
+infect/infect.1
+infect/infect.c
 objres/Makefile
 objres/README
 objres/objres.1

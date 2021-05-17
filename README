@@ -46,7 +46,7 @@ elftoc/
 
 ebfc/
   ebfc is a compiler for a tiny programming language. The compiler can
-  generate 32-bit ELF executables, object files, and shared libraries.
+  generate 64-bit ELF executables, object files, and shared libraries.
 
 infect/
   infect provides a very simple example of modifying an ELF executable
@@ -72,16 +72,16 @@ somewhat orthogonal to the subject of most of the programs here. They
 can be found at <http://www.muppetlabs.com/~breadbox/software/tiny/>
 if you are curious about them.
 
-    These programs are copyright (C) 1999, 2000, 2001, 2011 by Brian
-    Raiter. These programs are free software; you can redistribute
-    them and/or modify them under the terms of the GNU General Public
-    License as published by the Free Software Foundation; either
-    version 2 of the License, or (at your option) any later version.
-    These programs are distributed in the hope that they will be
-    useful, but WITHOUT ANY WARRANTY; without even the implied
-    warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-    See the GNU General Public License, included in this distribution
-    in the file COPYING, for more details.
+    These programs are copyright (C) 1999, 2000, 2001, 2011, 2021 by
+    Brian Raiter. These programs are free software; you can
+    redistribute them and/or modify them under the terms of the GNU
+    General Public License as published by the Free Software
+    Foundation; either version 2 of the License, or (at your option)
+    any later version. These programs are distributed in the hope that
+    they will be useful, but WITHOUT ANY WARRANTY; without even the
+    implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+    PURPOSE. See the GNU General Public License, included in this
+    distribution in the file COPYING, for more details.
 
 Bug reports and general feedback should be directed to the author at
 <breadbox@muppetlabs.com>.

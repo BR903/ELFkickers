@@ -1,42 +1,44 @@
 /* hash.c: part containing a hash table.
  *
- * Copyright (C) 1999-2001 by Brian Raiter, under the GNU General
- * Public License. No warranty. See COPYING for details.
+ * Copyright (C) 1999,2001,2021 by Brian Raiter, under the GNU General
+ * Public License, version 2. No warranty. See COPYING for details.
  */
 
-#include	<stdlib.h>
-#include	<string.h>
-#include	<elf.h>
-#include	"elfparts.h"
-#include	"gen.h"
+#include <stdlib.h>
+#include <string.h>
+#include <elf.h>
+#include "elfparts.h"
+#include "elfpartsi.h"
 
 /* Set up the elfpart structure.
  */
-static void new(elfpart *part)
+static bool new(elfpart *part)
 {
     part->shtype = SHT_HASH;
     part->shname = ".hash";
     part->flags = PF_R;
-    part->entsize = sizeof(Elf32_Word);
+    part->entsize = sizeof(Elf64_Word);
+    return true;
 }
 
-/* Determine the size of the hash table and allocate the necessary
- * memory.
+/* Select an efficient size for the hash table and allocate the
+ * necessary memory.
  */
-static void fill(elfpart *part, blueprint const *bp)
+static bool fill(elfpart *part, blueprint const *bp)
 {
-    static Elf32_Word const buckets[] = {
+    static Elf64_Word const buckets[] = {
 	1, 1, 3, 17, 37, 67, 97, 131, 197, 263, 521, 1031, 2053,
 	4099, 8209, 16411, 32771
     };
-    Elf32_Word *hash;
-    Elf32_Word	symnum;
-    int		i;
 
-    assert(part->link);
+    Elf64_Word *hash;
+    Elf64_Word symnum;
+    int i;
 
     if (!part->link->done)
-	return;
+	return true;
+    if (!_validate(part->link, "hash table has no symbol table set"))
+        return false;
 
     symnum = part->link->count;
     for (i = 1 ; i < (int)(sizeof buckets / sizeof *buckets) ; ++i)
@@ -44,34 +46,37 @@ static void fill(elfpart *part, blueprint const *bp)
 	    break;
     --i;
     part->count = symnum + buckets[i] + 2;
-    part->size = part->count * part->entsize;
-    hash = palloc(part);
+    hash = _resizepart(part, part->count * part->entsize);
+    if (!hash)
+        return false;
     hash[0] = buckets[i];
     hash[1] = symnum;
     memset(hash + 2, 0, (buckets[i] + symnum) * sizeof *hash);
 
-    part->done = TRUE;
+    part->done = true;
+    return true;
     (void)bp;
 }
 
-/* Create the hash table.
+/* Fill the table with pointers to the symbol table entries.
  */
-static void complete(elfpart *part, blueprint const *bp)
+static bool complete(elfpart *part, blueprint const *bp)
 {
-    Elf32_Word		       *chain = part->part;
-    Elf32_Sym		       *sym;
-    unsigned char const	       *strtab;
-    unsigned char const	       *name;
-    Elf32_Word			bucketnum;
-    Elf32_Word			hash;
-    Elf32_Sword			n;
-    int				i;
+    Elf64_Word *chain;
+    Elf64_Sym *sym;
+    unsigned char const *strtab;
+    unsigned char const *name;
+    Elf64_Word bucketnum;
+    Elf64_Word hash;
+    Elf64_Sword n;
+    int i;
 
     if (!part->link->done)
-	return;
+	return true;
 
     sym = part->link->part;
     strtab = part->link->link->part;
+    chain = part->part;
     bucketnum = chain[0];
     chain += 2 + bucketnum;
     for (i = 1, ++sym ; i < part->link->count ; ++i, ++sym) {
@@ -87,10 +92,11 @@ static void complete(elfpart *part, blueprint const *bp)
 	chain[n] = i;
     }
 
-    part->done = TRUE;
+    part->done = true;
+    return true;
     (void)bp;
 }
 
 /* The hash elfpart structure.
  */
-elfpart	part_hash = { new, NULL, fill, complete };
+elfpart part_hash = { new, NULL, fill, complete };
