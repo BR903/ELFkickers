@@ -32,7 +32,9 @@ out.o     : out.c out.h gen.h readelf.h pieces.h address.h shdrtab.h \
 elftoc.o  : elftoc.c gen.h readelf.h pieces.h address.h outbase.h out.h
 
 elfnames.c: mknames
-	echo '#include <elf.h>' | gcc -E -dM -xc /dev/stdin | ./$^ $@
+	echo '#include <elf.h>' >./~elftmp.c
+	$(CPP) -dM ./~elftmp.c | ./$^ $@
+	rm -f ./~elftmp.c
 
 mknames: mknames.o
 mknames.o: mknames.c

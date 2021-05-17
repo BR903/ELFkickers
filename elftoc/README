@@ -19,10 +19,10 @@ following lines:
 to produce a valid C program that will output a copy of the original
 input file.
 
-As part of the build process, elftoc reads the local copy of
-/usr/include/elf.h and builds a table of the available macro names.
-This step depends on the -dM option provided by gcc's preprocessor,
-which outputs a list of defined macros.
+As part of the build process, elftoc reads libc's elf.h include file
+and builds a table of the available macro names. This step depends on
+the -dM option being provided by the C preprocessor, which outputs a
+list of defined macros.
 
 While the form of a C struct usually works well to capture the
 internal organization of an ELF file, there can be issues with padding
@@ -40,8 +40,10 @@ presence of extra padding at the end of a file won't change a
 program's behavior (unless it's doing some arcane sort of
 self-examination).
 
-elftoc will also emit warnings if fields are misaligned for their
-type, or if the file appears to be corrupt in a few other ways.
-However, barring one or two special cases (such as trying to parse a
-big-endian file on a little-endian machine), elftoc will always
-attempt to produce valid output.
+Similarly, if a section is misaligned for its C struct type, elftoc
+will output the section as an array of byte values, rather than
+produce a more readable (but incorrect) definition. elftoc will also
+emit various warnings if the file appears to be corrupt in various
+ways. However, barring one or two special cases (such as trying to
+parse a big-endian file on a little-endian machine), elftoc will
+always attempt to produce a correct representation of the input file.
