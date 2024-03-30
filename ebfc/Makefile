@@ -1,7 +1,9 @@
 #  Makefile for ebfc
 
-CC = gcc
-CFLAGS = -Wall -Wextra -Wno-missing-field-initializers
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -Wno-missing-field-initializers
+AR ?= ar
+ARFLAGS ?= crs
 
 # The main program.
 
@@ -15,7 +17,7 @@ brainfuck.o: brainfuck.c elfparts.h ebfc.h
 libelfparts.a: elfparts.o \
 	       ehdr.o phdrtab.o shdrtab.o progbits.o \
                strtab.o symtab.o hash.o rel.o got.o dynamic.o
-	ar crs libelfparts.a $^
+	$(AR) $(ARFLAGS) libelfparts.a $^
 
 elfparts.o: elfparts.c elfparts.h elfpartsi.h
 ehdr.o: ehdr.c elfparts.h elfpartsi.h

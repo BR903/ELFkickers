@@ -1,7 +1,7 @@
 #  Makefile for rebind
 
-CC = gcc
-CFLAGS = -Wall -Wextra -I../elfrw
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -I../elfrw
 
 rebind: rebind.c ../elfrw/libelfrw.a
 

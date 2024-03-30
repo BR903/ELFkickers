@@ -1,7 +1,7 @@
 #  Makefile for infect
 
-CC = gcc
-CFLAGS = -Wall -Wextra
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra
 
 infect: infect.c
 

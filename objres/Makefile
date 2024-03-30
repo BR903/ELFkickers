@@ -1,8 +1,8 @@
 #  Makefile for objres
 
-CC = gcc
-CFLAGS = -Wall -Wextra -I../elfrw
-LDFLAGS = -Wall -Wextra
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -I../elfrw
+LDFLAGS ?= -Wall -Wextra
 
 objres: objres.o ../elfrw/libelfrw.a
 

@@ -1,7 +1,7 @@
 #  Makefile for sstrip
 
-CC = gcc
-CFLAGS = -Wall -Wextra -I../elfrw
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -I../elfrw
 
 sstrip: sstrip.c ../elfrw/libelfrw.a
 
