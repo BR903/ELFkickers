@@ -1,7 +1,7 @@
 #  Makefile for elfls
 
-CC = gcc
-CFLAGS = -Wall -Wextra -I../elfrw
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -I../elfrw
 
 elfls: elfls.c ../elfrw/libelfrw.a
 

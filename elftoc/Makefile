@@ -1,8 +1,9 @@
 #  Makefile for elftoc
 
-CC = gcc
-CFLAGS = -Wall -Wextra
-LDFLAGS = -Wall -Wextra
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra
+LDFLAGS ?= -Wall -Wextra
+CPP ?= $(CC) -E
 
 OBJS = gen.o names.o address.o readelf.o shdrtab.o phdrtab.o dynamic.o \
        pieces.o outbase.o outitems.o outelf64.o outelf32.o out.o elftoc.o

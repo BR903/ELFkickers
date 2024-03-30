@@ -1,13 +1,15 @@
 #  Makefile for libelfrw.a
 
-CC = gcc
-CFLAGS = -Wall -Wextra -O3
+CC ?= gcc
+CFLAGS ?= -Wall -Wextra -O3
+AR ?= ar
+ARFLAGS ?= crs
 
 LIBOBJS = elfrw.o elfrw_dyn.o elfrw_ehdr.o elfrw_phdr.o elfrw_rel.o \
           elfrw_shdr.o elfrw_sym.o elfrw_ver.o
 
 libelfrw.a: $(LIBOBJS)
-	ar crs $@ $^
+	$(AR) $(ARFLAGS) $@ $^
 
 elfrw.o: elfrw.c elfrw.h elfrw_int.h
 elfrw_dyn.o: elfrw_dyn.c elfrw_int.h
