@@ -78,9 +78,9 @@ static int		ldepls = FALSE;	/* TRUE = show libraries */
 static int		dostrs = TRUE;	/* TRUE = show entry strings */
 static int		dooffs = TRUE;	/* TRUE = show file offsets */
 
-static char		sizefmt[8];	/* num digits to show sizes */
-static char		addrfmt[8];	/* num digits to show addresses */
-static char		offsetfmt[8];	/* num digits to show offsets */
+static char		sizefmt[16];	/* num digits to show sizes */
+static char		addrfmt[16];	/* num digits to show addresses */
+static char		offsetfmt[16];	/* num digits to show offsets */
 static int		outwidth;	/* maximum width of output */
 
 /* The error-reporting function.
