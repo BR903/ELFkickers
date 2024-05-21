@@ -128,6 +128,8 @@ static int readphdrtable(void)
 {
     if (!ehdr.e_phoff || !ehdr.e_phnum)
 	return err("ELF file has no program header table.");
+    if (fseek(thefile, ehdr.e_phoff, SEEK_SET))
+	return err("could not seek to program segment header table in file.");
 
     if (!(phdrs = realloc(phdrs, ehdr.e_phnum * sizeof *phdrs)))
 	return err("Out of memory!");
